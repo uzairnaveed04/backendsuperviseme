@@ -198,21 +198,20 @@ const SupervisorProjectTracking = () => {
   const deleteProjectAssignedFromRequest = async (request) => {
     Alert.alert(
       "🗑️ Confirm Delete",
-      "Are you sure you want to delete this project request? This action cannot be undone.",
+      "Are you sure you want to hide this project from your view? This action cannot be undone.",
       [
         {
           text: "Cancel",
           style: "cancel"
         },
         {
-          text: "Delete",
+          text: "Hide",
           style: "destructive",
           onPress: async () => {
             try {
-              // Debug logs for supervisorEmail
+              // Hide project for supervisor only
               console.log('Auth supervisorEmail:', supervisorEmail);
               console.log('Request supervisorEmail:', request.supervisorEmail);
-              // For each project, log supervisorEmail
               const q = query(
                 collection(db, 'projects'),
                 where('requestId', '==', request.id),
@@ -220,13 +219,10 @@ const SupervisorProjectTracking = () => {
               );
               const snapshot = await getDocs(q);
               for (const docSnap of snapshot.docs) {
-                const projectData = docSnap.data();
-                console.log('Project supervisorEmail:', projectData.supervisorEmail);
                 await updateDoc(doc(db, 'projects', docSnap.id), {
                   visibleToSupervisor: false,
                 });
               }
-              // Only hide the project for supervisor, don't delete projectRequests
               setDeletedRequests((prev) => [...prev, request.id]);
               setRequests((prev) => prev.filter((r) => r.id !== request.id));
               showMessage('✅ Success', 'Project hidden from supervisor view!');
@@ -238,7 +234,7 @@ const SupervisorProjectTracking = () => {
                 errorMsg = err.message;
               }
               showMessage('❌ Error', errorMsg);
-              console.log('Firestore delete error:', err);
+              console.log('Firestore update error:', err);
             }
           }
         }

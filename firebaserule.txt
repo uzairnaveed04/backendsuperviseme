@@ -34,8 +34,13 @@ service cloud.firestore {
         request.resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
       );
 
-      // 🔹 TESTING RULE: allow any authenticated user to update or delete
-      allow update, delete: if request.auth != null;
+        // 🔹 UPDATE ACCESS (secure)
+        allow update: if request.auth != null && (
+          resource.data.studentEmail.lower() == request.auth.token.email.lower() ||
+          resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
+        );
+        // 🔹 DELETE ACCESS (testing only)
+        allow delete: if request.auth != null;
     }
 
     // ✅ Project Submissions
