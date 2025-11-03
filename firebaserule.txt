@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ✅ Students - can only access their own document
+    match /students/{studentId} {
+      allow read, write, update, delete: if request.auth != null && request.auth.uid == studentId;
+    }
+
+    // ✅ Supervisors - can only access their own document
+    // - Any authenticated user can READ supervisor docs (for listing/selection)
+    // - Only the supervisor themself can CREATE/UPDATE/DELETE their own doc (by email)
+    match /supervisors/{supervisorId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+                   request.resource.data.email.lower() == request.auth.token.email.lower();
+      allow update, delete: if request.auth != null &&
+                            resource.data.email.lower() == request.auth.token.email.lower();
+    }
+
+    // ✅ PROJECTS COLLECTION (UPDATED)
+    match /projects/{projectId} {
+
+      // 🔹 READ ACCESS
+      allow read: if request.auth != null && (
+        resource.data.studentEmail.lower() == request.auth.token.email.lower() ||
+        resource.data.supervisorEmail.lower() == request.auth.token.email.lower() ||
+        resource.data.status == 'available'
+      );
+
+      // 🔹 CREATE ACCESS
+      allow create: if request.auth != null && (
+        request.resource.data.studentEmail.lower() == request.auth.token.email.lower() ||
+        request.resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
+      );
+
+      // 🔹 TESTING RULE: allow any authenticated user to update or delete
+      allow update, delete: if request.auth != null;
+    }
+
+    // ✅ Project Submissions
+    match /projectSubmissions/{submissionId} {
+      allow read, write, update, delete: if request.auth != null && (
+        resource.data.studentUID == request.auth.uid || 
+        resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
+      );
+    }
+
+    // ✅ Project Requests
+    match /projectRequests/{requestId} {
+      allow read, update, delete: if request.auth != null && (
+        resource.data.studentUID == request.auth.uid || 
+        resource.data.supervisorEmail.lower() == request.auth.token.email.lower() ||
+        resource.data.studentEmail.lower() == request.auth.token.email.lower()
+      );
+      allow create: if request.auth != null && (
+        request.resource.data.studentEmail.lower() == request.auth.token.email.lower() ||
+        request.resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
+      );
+    }
+
+    // ✅ General Requests
+    match /requests/{requestId} {
+      allow read, write, update, delete: if request.auth != null && (
+        resource.data.studentEmail.lower() == request.auth.token.email.lower() || 
+        resource.data.supervisorEmail.lower() == request.auth.token.email.lower()
+      );
+    }
+
+    // ✅ Messages
+    match /messages/{messageId} {
+      allow read: if request.auth != null && (
+        resource.data.senderEmail.lower() == request.auth.token.email.lower() ||
+        resource.data.receiverEmail.lower() == request.auth.token.email.lower()
+      );
+      allow create: if request.auth != null && (
+        request.resource.data.senderEmail.lower() == request.auth.token.email.lower()
+      );
+      allow update, delete: if request.auth != null && (
+        resource.data.senderEmail.lower() == request.auth.token.email.lower() ||
+        resource.data.receiverEmail.lower() == request.auth.token.email.lower()
+      );
+    }
+
+    // ✅ Chats
+    match /chats/{chatId} {
+      allow read: if request.auth != null && (
+        chatId.matches('(?i).*' + request.auth.token.email + '.*')
+      );
+      
+      allow create: if request.auth != null && (
+        chatId.matches('(?i).*' + request.auth.token.email + '.*')
+      ) && (
+        request.resource.data.senderId.matches('(?i)^' + request.auth.token.email + '$')
+      );
+      
+      allow update, delete: if request.auth != null && (
+        chatId.matches('(?i).*' + request.auth.token.email + '.*')
+      );
+
+      match /messages/{messageId} {
+        allow read, write, update, delete: if request.auth != null && (
+          chatId.matches('(?i).*' + request.auth.token.email + '.*')
+        );
+      }
+    }
+
+    // ✅ Tasks
+    match /tasks/{taskId} {
+      allow read: if request.auth != null && (
+        resource.data.assignedTo == request.auth.token.email.lower() ||
+        resource.data.createdBy == request.auth.token.email.lower()
+      );
+
+      allow update: if request.auth != null && (
+        (resource.data.assignedTo == request.auth.token.email.lower()) ||
+        (resource.data.createdBy == request.auth.token.email.lower())
+      );
+
+      allow create: if request.auth != null &&
+                   request.resource.data.createdBy == request.auth.token.email.lower();
+
+      allow delete: if request.auth != null &&
+                   resource.data.createdBy == request.auth.token.email.lower();
+    }
+
+    // ✅ Reminders
+    match /reminders/{reminderId} {
+      allow read: if request.auth != null && (
+        resource.data.studentEmail == request.auth.token.email.lower() ||
+        resource.data.supervisorEmail == request.auth.token.email.lower()
+      );
+
+      allow update: if request.auth != null && (
+        (resource.data.studentEmail == request.auth.token.email.lower()) ||
+        (resource.data.supervisorEmail == request.auth.token.email.lower())
+      );
+
+      allow create: if request.auth != null &&
+                    request.resource.data.supervisorEmail == request.auth.token.email.lower();
+
+      allow delete: if request.auth != null && (
+        resource.data.studentEmail == request.auth.token.email.lower() ||
+        resource.data.supervisorEmail == request.auth.token.email.lower()
+      );
+    }
+
+    // ✅ Reminder History
+    match /reminderHistory/{historyId} {
+      allow read: if request.auth != null && (
+        resource.data.studentEmail == request.auth.token.email.lower() ||
+        resource.data.supervisorEmail == request.auth.token.email.lower()
+      );
+
+      allow create: if request.auth != null && (
+        request.resource.data.studentEmail == request.auth.token.email.lower() ||
+        request.resource.data.supervisorEmail == request.auth.token.email.lower()
+      );
+
+      allow update, delete: if false;
+    }
+
+    // ✅ Weekly Logs
+    match /weeklyLogs/{logId} {
+      allow read: if request.auth != null && (
+        resource.data.studentEmail == request.auth.token.email ||
+        resource.data.supervisorEmail == request.auth.token.email
+      );
+      allow create: if request.auth != null;
+    }
+
+    // ✅ Required Subjects
+    match /requiredSubjectsV2/{docId} {
+      allow read, write: if request.auth != null;
+      match /studentSubjects/{studentId} {
+        allow read, write: if request.auth != null && request.auth.uid == studentId;
+      }
+    }
+
+    // ✅ Feedback Evaluation
+    match /feedbackEvaluation/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ✅ Supervisors Chat
+    match /supervisorschat/{docId} {
+      allow read, write, update, delete: if request.auth != null && (
+        resource.data.supervisorEmail == request.auth.token.email ||
+        resource.data.participants[request.auth.token.email] == true
+      );
+    }
+
+    // ❌ Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
