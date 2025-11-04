@@ -1,6 +1,7 @@
 // Import dependencies
 const express = require('express');
 const cors = require('cors');
+const server = require('./Server'); // 👈 ye line add karo (agar Server.js exist karta hai)
 
 // Create app
 const app = express();
