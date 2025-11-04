@@ -3,7 +3,7 @@ import { View, Text, FlatList, Image, ActivityIndicator, StyleSheet, TouchableOp
 import { getAuth } from 'firebase/auth';
 
 const SupervisorDashboard = () => {
-  const BACKEND_URL = "http://192.168.10.4:3000";
+  const BACKEND_URL = "https://backendsuperviseme.vercel.app";
   const [repositories, setRepositories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

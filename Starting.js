@@ -6,8 +6,7 @@ import {
   StyleSheet, 
   Dimensions, 
   ImageBackground,
-  Animated,
-  Image
+  Animated
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -64,22 +63,13 @@ const WelcomeScreen = () => {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://ww2.comsats.edu.pk/cs_atk/slides/3.jpg' }}
+      source={{ uri: 'https://i.pinimg.com/736x/83/49/40/8349402233c4f9a5dc21b2dc6e9d2416.jpg' }}
       style={styles.container}
       resizeMode="cover"
       imageStyle={{ transform: [{ scale: 1.1 }] }}
     >
-      {/* 🌟 Top-Left Fancy Blue Layer */}
-      <LinearGradient
-        colors={[
-          'rgba(37, 99, 235, 0.4)',   // Deep blue
-          'rgba(37, 99, 235, 0.5)',   // Light blue
-          'transparent'               // Fade out
-        ]}
-        style={styles.topLeftOverlay}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+
+      
 
       {/* 🌟 Light Fancy Gradient Full Overlay */}
       <LinearGradient
@@ -91,45 +81,18 @@ const WelcomeScreen = () => {
         style={styles.gradientOverlay}
       >
         <View style={styles.content}>
-          {/* Animated Header */}
-          <Animated.View style={[
-            styles.header,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
-          ]}>
+
+          {/* Text Section */}
+          <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
             <Text style={styles.title}>Welcome to</Text>
             <Text style={styles.appName}>SuperviseMe</Text>
             <Text style={styles.subTitle}>COMSATS University Islamabad</Text>
-
-            {/* Logo with Glow */}
-            <Animated.View style={[
-              styles.logoWrapper, 
-              { 
-                shadowOpacity: glowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.3, 0.9],
-                }),
-                transform: [{ scale: scaleAnim }]
-              }
-            ]}>
-              <Image 
-                source={{ uri: 'https://i.pinimg.com/736x/48/4e/85/484e85fda1c51309a3603fae41252d5e.jpg' }} 
-                style={styles.universityLogo}
-              />
-            </Animated.View>
+            {/* New Quote Added */}
+            <Text style={styles.quote}>COMSATS Excellence, Supervised Perfectly</Text>
           </Animated.View>
 
-          {/* Quote */}
-          <Animated.View style={[styles.quoteContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.quoteText}>
-              “Success comes from setting goals and managing them effectively.”
-            </Text>
-            <Text style={styles.quoteHighlight}>
-              SuperviseMe makes that possible 🎓
-            </Text>
-          </Animated.View>
-
-          {/* Fancy Start Button */}
-          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+          {/* Button Section */}
+          <Animated.View style={[styles.buttonContainer, { transform: [{ scale: buttonScale }] }]}>
             <TouchableOpacity 
               style={styles.button}
               onPress={handleStart}
@@ -144,13 +107,14 @@ const WelcomeScreen = () => {
                 <Text style={styles.buttonText}>Get Started</Text>
                 <Ionicons 
                   name="arrow-forward-circle" 
-                  size={28} 
+                  size={24} 
                   color="#fff" 
                   style={styles.buttonIcon} 
                 />
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
+
         </View>
       </LinearGradient>
     </ImageBackground>
@@ -161,7 +125,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, width: '100%', height: '100%' },
   gradientOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // 🌟 New Top-Left Blue Layer
   topLeftOverlay: {
     position: 'absolute',
     top: 0,
@@ -172,106 +135,93 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 
-  content: { width: '90%', alignItems: 'center', padding: 20 },
-  header: { alignItems: 'center', marginBottom: 25 },
+  content: { 
+    flex: 1,                   
+    width: '100%', 
+    padding: 20, 
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  header: { 
+    alignItems: 'center', 
+    marginTop: height * 0.25,
+    marginBottom: 20,
+  },
 
   title: {
     fontSize: 30,
     fontWeight: '600',
     textAlign: 'center',
-    color: '#FFFFFF',
+    color: '#FF9800',
     textShadowColor: 'black',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
   },
   appName: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '900',
     textAlign: 'center',
-    color: '#FFFFFF',
+    color: '#e5ff00ff',
     textShadowColor: 'black',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
     marginTop: 5,
   },
   subTitle: {
-    fontSize: 23,
+    fontSize: 19,
     fontWeight: '500',
     textAlign: 'center',
-    color: '#FFFFFF',
+    color: '#15ee0dff',
     textShadowColor: 'black',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
     marginTop: 5,
   },
-
-  logoWrapper: {
+  quote: {
+    fontSize: 20,
+    fontWeight: '400',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    color: '#feffe0ff',
+    textShadowColor: 'black',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
     marginTop: 15,
-    borderRadius: 65,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 25,
-    elevation: 20,
-  },
-  universityLogo: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    resizeMode: 'cover',
-    borderWidth: 3,
-    borderColor: '#fff',
+    letterSpacing: 0.5,
   },
 
-  quoteContainer: {
-    marginBottom: 50,
-    paddingHorizontal: 20,
+  buttonContainer: {
+    width: '100%',
     alignItems: 'center',
-  },
-  quoteText: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#FFFFFF',
-    textShadowColor: 'black',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-  },
-  quoteHighlight: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#FFFFFF',
-    textShadowColor: 'black',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-    marginTop: 8,
+    marginBottom: height * 0.1,
   },
 
   button: {
-    width: width * 0.75,
-    borderRadius: 35,
+    width: width * 0.6,
+    borderRadius: 25,
     overflow: 'hidden',
-    elevation: 15,
+    elevation: 10,
     shadowColor: '#2563EB',
     shadowOpacity: 0.6,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
   },
   buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 30,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginRight: 10,
+    letterSpacing: 0.5,
+    marginRight: 6,
   },
-  buttonIcon: { marginLeft: 5 },
+  buttonIcon: { marginLeft: 2 },
 });
 
 export default WelcomeScreen;

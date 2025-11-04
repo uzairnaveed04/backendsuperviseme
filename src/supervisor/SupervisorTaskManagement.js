@@ -55,10 +55,10 @@ const SupervisorTaskManagement = () => {
   const [logs, setLogs] = useState([]);
   const [loadingMon, setLoadingMon] = useState(true);
   const [dialog, setDialog] = useState({ visible: false, title: '', message: '' });
-  const [showAllTasks, setShowAllTasks] = useState(false); // New state for view all
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [assigningTask, setAssigningTask] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
 
-  // ALL YOUR ORIGINAL LOGIC REMAINS EXACTLY THE SAME
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -167,11 +167,19 @@ const SupervisorTaskManagement = () => {
       return;
     }
 
+    // 🆕 SECURITY CHECK: Prevent supervisor from assigning task to themselves
+    if (assignedTo.trim().toLowerCase() === supEmail.toLowerCase()) {
+      showDialog('Security Restriction', 'You cannot assign tasks to yourself. Please assign tasks only to students.');
+      return;
+    }
+
     const date = new Date(deadline);
     if (isNaN(date)) {
       showDialog('Invalid Date', 'Use YYYY-MM-DD');
       return;
     }
+
+    setAssigningTask(true);
 
     try {
       const slug = 'task-' + title.toLowerCase().replace(/\s+/g, '-');
@@ -210,15 +218,15 @@ const SupervisorTaskManagement = () => {
     } catch (err) {
       console.error('Error while assigning task/reminder:', err);
       showDialog('Error', 'Failed to assign task and reminder ❌');
+    } finally {
+      setAssigningTask(false);
     }
   };
 
-  // Function to handle view all tasks
   const handleViewAllTasks = () => {
     setShowAllTasks(!showAllTasks);
   };
 
-  // Get tasks to display based on showAllTasks state
   const getTasksToDisplay = () => {
     return showAllTasks ? tasks : tasks.slice(0, 3);
   };
@@ -253,7 +261,7 @@ const SupervisorTaskManagement = () => {
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Premium Header */}
+        {/* Premium Header - REMOVED SUPERVISOR PROFILE BADGE */}
         <Animatable.View animation="fadeInDown" duration={1000} style={styles.header}>
           <LinearGradient
             colors={theme.gradient}
@@ -266,9 +274,7 @@ const SupervisorTaskManagement = () => {
                 <Text style={styles.headerTitle}>Task Manager</Text>
                 <Text style={styles.headerSubtitle}>Supervisor Dashboard</Text>
               </View>
-              <View style={styles.headerBadge}>
-                <FontAwesome5 name="crown" size={16} color="#FFD700" />
-              </View>
+              {/* REMOVED: Supervisor crown badge */}
             </View>
             
             <View style={styles.headerActions}>
@@ -285,10 +291,7 @@ const SupervisorTaskManagement = () => {
                 </LinearGradient>
               </TouchableOpacity>
               
-              <View style={styles.profileBadge}>
-                <Ionicons name="person" size={16} color="white" />
-                <Text style={styles.profileText}>Supervisor</Text>
-              </View>
+              {/* REMOVED: Supervisor profile badge */}
             </View>
           </LinearGradient>
         </Animatable.View>
@@ -318,53 +321,10 @@ const SupervisorTaskManagement = () => {
           />
         </Animatable.View>
 
-        {/* Supervisor Profile Card */}
-        {loadingSup ? (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={styles.loadingText}>Loading profile...</Text>
-          </View>
-        ) : (
-          <Animatable.View animation="fadeInUp" duration={800} delay={500} style={styles.profileCard}>
-            <LinearGradient
-              colors={theme.darkGradient}
-              style={styles.profileGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.profileHeader}>
-                <View style={styles.profileAvatar}>
-                  <Ionicons name="person-circle" size={40} color={theme.primary} />
-                </View>
-                <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>Supervisor</Text>
-                  <Text style={styles.profileEmail}>{supEmail}</Text>
-                </View>
-                <View style={styles.pointsBadge}>
-                  <FontAwesome5 name="star" size={14} color="#FFD700" />
-                  <Text style={styles.pointsText}>{supData.totalPoints}</Text>
-                </View>
-              </View>
-              
-              {supData.badges.length > 0 && (
-                <View style={styles.badgesContainer}>
-                  <Text style={styles.badgesLabel}>Badges Earned:</Text>
-                  <View style={styles.badgesList}>
-                    {supData.badges.slice(0, 3).map((badge, index) => (
-                      <View key={index} style={styles.badgeItem}>
-                        <FontAwesome5 name="medal" size={12} color={theme.secondary} />
-                        <Text style={styles.badgeText}>{badge}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </LinearGradient>
-          </Animatable.View>
-        )}
+        {/* REMOVED: Entire Supervisor Profile Card Section */}
 
-        {/* Task Monitoring Section - WITH VIEW ALL FUNCTIONALITY */}
-        <Animatable.View animation="fadeInUp" duration={800} delay={600} style={styles.section}>
+        {/* Task Monitoring Section */}
+        <Animatable.View animation="fadeInUp" duration={800} delay={400} style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <FontAwesome5 name="list-alt" size={20} color={theme.primary} />
@@ -452,7 +412,7 @@ const SupervisorTaskManagement = () => {
         </Animatable.View>
 
         {/* Weekly Logs Section */}
-        <Animatable.View animation="fadeInUp" duration={800} delay={700} style={styles.section}>
+        <Animatable.View animation="fadeInUp" duration={800} delay={500} style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <Ionicons name="document-text" size={20} color={theme.primary} />
@@ -503,7 +463,7 @@ const SupervisorTaskManagement = () => {
         </Animatable.View>
 
         {/* Assign Task Form - Premium Design */}
-        <Animatable.View animation="fadeInUp" duration={800} delay={800} style={styles.formSection}>
+        <Animatable.View animation="fadeInUp" duration={800} delay={600} style={styles.formSection}>
           <LinearGradient
             colors={theme.darkGradient}
             style={styles.formGradient}
@@ -610,23 +570,45 @@ const SupervisorTaskManagement = () => {
                     autoCapitalize="none"
                   />
                 </View>
+                <Text style={styles.securityNote}>
+                  🔒 You can only assign tasks to students, not to yourself
+                </Text>
               </View>
               
               <TouchableOpacity 
-                style={styles.submitButton} 
+                style={[
+                  styles.submitButton,
+                  assigningTask && styles.submitButtonDisabled
+                ]} 
                 onPress={handleAssign}
                 activeOpacity={0.8}
+                disabled={assigningTask}
               >
                 <LinearGradient
-                  colors={theme.gradient}
+                  colors={assigningTask ? ['#94A3B8', '#64748B'] : theme.gradient}
                   style={styles.submitButtonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Ionicons name="send" size={20} color="white" />
-                  <Text style={styles.submitButtonText}>Assign Task</Text>
+                  {assigningTask ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={20} color="white" />
+                      <Text style={styles.submitButtonText}>Assign Task</Text>
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
+
+              {assigningTask && (
+                <Animatable.View 
+                  animation="fadeIn"
+                  style={styles.assigningStatus}
+                >
+                  <Text style={styles.assigningText}>Assigning task and creating reminder...</Text>
+                </Animatable.View>
+              )}
             </View>
           </LinearGradient>
         </Animatable.View>
@@ -711,14 +693,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
   },
-  headerBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,215,0,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -739,20 +713,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     marginLeft: 8,
-    fontSize: 14,
-  },
-  profileBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  profileText: {
-    color: 'white',
-    fontWeight: '600',
-    marginLeft: 6,
     fontSize: 14,
   },
 
@@ -796,86 +756,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.muted,
     textAlign: 'center',
-  },
-
-  // Profile Card
-  profileCard: {
-    marginHorizontal: 20,
-    marginBottom: 25,
-    borderRadius: 25,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  profileGradient: {
-    padding: 25,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  profileAvatar: {
-    marginRight: 15,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: theme.muted,
-  },
-  pointsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,215,0,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  pointsText: {
-    color: theme.secondary,
-    fontWeight: 'bold',
-    marginLeft: 4,
-    fontSize: 14,
-  },
-  badgesContainer: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    paddingTop: 15,
-  },
-  badgesLabel: {
-    color: theme.muted,
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  badgesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  badgeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginRight: 8,
-    marginBottom: 5,
-  },
-  badgeText: {
-    color: theme.text,
-    fontSize: 12,
-    marginLeft: 4,
   },
 
   // Section Styles
@@ -1123,6 +1003,12 @@ const styles = StyleSheet.create({
   optionText: {
     color: theme.text,
   },
+  securityNote: {
+    fontSize: 12,
+    color: theme.warning,
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
   submitButton: {
     borderRadius: 15,
     overflow: 'hidden',
@@ -1132,6 +1018,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 15,
     elevation: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonGradient: {
     flexDirection: 'row',
@@ -1145,6 +1034,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 10,
+  },
+
+  // Assigning Status Styles
+  assigningStatus: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  assigningText: {
+    color: theme.primary,
+    fontSize: 14,
+    fontWeight: '500',
   },
 
   // Empty State & Loading
@@ -1171,10 +1074,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-  },
-  loadingText: {
-    color: theme.muted,
-    marginTop: 12,
   },
 
   // Modal Styles

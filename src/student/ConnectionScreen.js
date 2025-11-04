@@ -31,9 +31,9 @@ export default function StudentConnectionRequestScreen() {
           // Use backend API to check student status
           const token = await auth.currentUser.getIdToken();
           console.log('🔍 Making API call to check student status...');
-          console.log('🔗 URL: http://192.168.10.8:3000/api/student/status');
+          console.log('🔗 URL: https://backendsuperviseme.vercel.app/api/student/status');
 
-          const response = await fetch('http://192.168.10.8:3000/api/student/status', {
+          const response = await fetch('https://backendsuperviseme.vercel.app/api/student/status', {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -121,7 +121,7 @@ export default function StudentConnectionRequestScreen() {
 
     // Use backend API instead of direct Firebase
     const token = await auth.currentUser.getIdToken();
-    const response = await fetch('http://192.168.10.8:3000/api/connection-requests', {
+    const response = await fetch('https://backendsuperviseme.vercel.app/api/connection-requests', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -11,7 +11,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     Animated,
-    Easing,
     Dimensions,
 } from "react-native";
 import { db } from "../../firebaseConfig";
@@ -40,31 +39,40 @@ const CommunicationTool = ({ navigation }) => {
     const [showDialog, setShowDialog] = useState(false);
     const [dialogMessage, setDialogMessage] = useState("");
     const [unreadCounts, setUnreadCounts] = useState({});
-    const fadeAnim = useRef(new Animated.Value(0)).current;
     const [activeTab, setActiveTab] = useState('supervisors');
+    
+    // Lightweight animations only
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const headerAnim = useRef(new Animated.Value(0)).current;
 
     const colors = {
-        primary: '#B22222',
-        secondary: '#DC143C',
+        primary: '#8B5CF6',
+        secondary: '#6366F1',
+        accent: '#00D4AA',
         success: '#10B981',
         warning: '#F59E0B',
-        danger: '#EF4444',
+        danger: '#FF6B9C',
         light: '#F8FAFC',
         dark: '#1E293B',
         muted: '#94A3B8',
         card: '#FFFFFF',
-        gradientStart: '#B22222',
-        gradientEnd: '#DC143C',
-        background: '#F1F5F9'
+        background: '#0F172A'
     };
 
     useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.out(Easing.exp),
-            useNativeDriver: true,
-        }).start();
+        // Simple sequential animations
+        Animated.sequence([
+            Animated.timing(headerAnim, {
+                toValue: 1,
+                duration: 800,
+                useNativeDriver: true,
+            }),
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 600,
+                useNativeDriver: true,
+            })
+        ]).start();
 
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -85,7 +93,7 @@ const CommunicationTool = ({ navigation }) => {
             const token = await getAuth().currentUser.getIdToken();
 
             const res = await fetch(
-                `http://192.168.10.8:3000/api/all-supervisors`,
+                'https://backendsuperviseme.vercel.app/api/all-supervisors',
                 {
                     headers: { Authorization: `Bearer ${token}` },
                 }
@@ -114,33 +122,24 @@ const CommunicationTool = ({ navigation }) => {
 
     const fetchMessages = (email) => {
         const q = query(collection(db, "messages"), where("senderId", "==", email));
-        onSnapshot(q, (snapshot) => {
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             const messages = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
             }));
             setSentMessages(messages);
 
+            const newUnreadCounts = {};
             messages.forEach((msg) => {
                 if (msg.status === "Approved") {
-                    const chatId = `${email}_${msg.receiverId}`;
-                    const msgRef = collection(db, "chats", chatId, "messages");
-
-                    const q2 = query(
-                        msgRef,
-                        where("senderId", "==", msg.receiverId),
-                        where("read", "==", false)
-                    );
-
-                    onSnapshot(q2, (snapshot) => {
-                        setUnreadCounts((prev) => ({
-                            ...prev,
-                            [msg.receiverId]: snapshot.size,
-                        }));
-                    });
+                    newUnreadCounts[msg.receiverId] = 0;
                 }
             });
+            setUnreadCounts(newUnreadCounts);
         });
+
+        return unsubscribe;
     };
 
     const sendRequest = async () => {
@@ -153,7 +152,7 @@ const CommunicationTool = ({ navigation }) => {
         try {
             const token = await getAuth().currentUser.getIdToken();
             const response = await fetch(
-                `http://192.168.10.8:3000/api/check-supervisor/${selectedSupervisor.email}`,
+                `https://backendsuperviseme.vercel.app/api/check-supervisor/${selectedSupervisor.email}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -199,30 +198,32 @@ const CommunicationTool = ({ navigation }) => {
             });
 
             setMessage("");
-            setDialogMessage("Request sent successfully!");
+            setDialogMessage("🎉 Request sent successfully!");
             setShowDialog(true);
             setActiveTab('requests');
         } catch (error) {
             console.error("Error sending request:", error);
-            setDialogMessage("Failed to send request. Please try again.");
+            setDialogMessage("❌ Failed to send request. Please try again.");
             setShowDialog(true);
         }
     };
 
+    // Simple debounce without complex logic
     const handleSupervisorPress = useCallback((item) => {
         setSelectedSupervisor(item);
     }, []);
 
-    const SupervisorItem = React.memo(({ item, selectedSupervisor, onSupervisorPress, setDialogMessage, setShowDialog, index }) => {
+    // Optimized SupervisorItem with minimal animations
+    const SupervisorItem = React.memo(({ item, selectedSupervisor, onSupervisorPress, index }) => {
         const isSelected = selectedSupervisor?.email === item.email;
-        const animValue = useRef(new Animated.Value(0)).current;
+        const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
         useEffect(() => {
-            Animated.timing(animValue, {
+            Animated.spring(scaleAnim, {
                 toValue: 1,
-                duration: 500,
-                delay: index * 100,
-                easing: Easing.out(Easing.exp),
+                tension: 50,
+                friction: 7,
+                delay: index * 50,
                 useNativeDriver: true,
             }).start();
         }, []);
@@ -236,78 +237,79 @@ const CommunicationTool = ({ navigation }) => {
             }
         };
 
-        const scaleAnim = animValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.9, 1],
-        });
-
         return (
-            <Animated.View
+            <Animated.View 
                 style={[
-                    styles.supervisorItem,
-                    isSelected && styles.selectedSupervisor,
-                    !item.available && { opacity: 0.6 },
-                    {
-                        opacity: animValue,
-                        transform: [
-                            { scale: scaleAnim },
-                            {
-                                translateY: animValue.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [50, 0],
-                                }),
-                            },
-                        ],
-                    },
+                    styles.supervisorItemWrapper,
+                    { transform: [{ scale: scaleAnim }] }
                 ]}
             >
                 <TouchableOpacity
-                    style={styles.supervisorContent}
+                    style={[
+                        styles.supervisorItem,
+                        isSelected && styles.selectedSupervisor,
+                        !item.available && styles.unavailableSupervisor
+                    ]}
                     onPress={handlePress}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                 >
+                    {/* Premium Avatar with Gradient */}
                     <LinearGradient
                         colors={
                             isSelected
-                                ? [colors.primary, colors.secondary]
+                                ? ['#8B5CF6', '#6366F1']
                                 : ['#FFFFFF', '#F8FAFC']
                         }
-                        style={styles.avatarContainer}
+                        style={styles.avatarGradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                     >
-                        <Ionicons
-                            name={item.avatar || "person"}
-                            size={28}
-                            color={isSelected ? colors.card : colors.primary}
-                        />
+                        <View style={styles.avatarContainer}>
+                            <Ionicons
+                                name={item.avatar || "person"}
+                                size={26}
+                                color={isSelected ? 'white' : '#8B5CF6'}
+                            />
+                        </View>
                     </LinearGradient>
 
+                    {/* Supervisor Info */}
                     <View style={styles.supervisorInfo}>
-                        <Text style={[styles.supervisorName, isSelected && { color: colors.card }]}>
+                        <Text style={[styles.supervisorName, isSelected && styles.selectedText]}>
                             {item.name}
                         </Text>
-                        <Text style={[styles.supervisorSpecialty, isSelected && { color: colors.card }]}>
+                        <Text style={[styles.supervisorSpecialty, isSelected && styles.selectedText]}>
                             {item.specialty}
                         </Text>
-                        <Text style={[styles.supervisorEmail, isSelected && { color: colors.card }]}>
+                        <Text style={[styles.supervisorEmail, isSelected && styles.selectedText]}>
                             {item.email}
                         </Text>
                     </View>
 
+                    {/* Selection Indicator */}
                     {isSelected && (
-                        <View style={[styles.selectedIndicator, { backgroundColor: colors.card }]}>
-                            <Ionicons name="checkmark" size={20} color={colors.primary} />
+                        <View style={styles.selectedIndicator}>
+                            <Ionicons name="checkmark" size={20} color="#8B5CF6" />
                         </View>
                     )}
 
+                    {/* Availability Badge */}
                     {!item.available && (
                         <View style={styles.limitedBadge}>
-                            <Text style={styles.limitedText}>Limited</Text>
+                            <Text style={styles.limitedText}>FULL</Text>
                         </View>
                     )}
+
+                    {/* Premium Glow Effect */}
+                    {isSelected && <View style={styles.glowEffect} />}
                 </TouchableOpacity>
             </Animated.View>
+        );
+    }, (prevProps, nextProps) => {
+        return (
+            prevProps.item.id === nextProps.item.id &&
+            prevProps.selectedSupervisor?.email === nextProps.selectedSupervisor?.email &&
+            prevProps.item.available === nextProps.item.available
         );
     });
 
@@ -317,34 +319,15 @@ const CommunicationTool = ({ navigation }) => {
             index={index}
             selectedSupervisor={selectedSupervisor}
             onSupervisorPress={handleSupervisorPress}
-            setDialogMessage={setDialogMessage}
-            setShowDialog={setShowDialog}
         />
     ), [selectedSupervisor, handleSupervisorPress]);
 
-    const renderMessageItem = ({ item, index }) => {
-        const translateY = new Animated.Value(50);
-        const opacity = new Animated.Value(0);
-
-        Animated.parallel([
-            Animated.timing(translateY, {
-                toValue: 0,
-                duration: 500,
-                delay: index * 100,
-                useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-                toValue: 1,
-                duration: 500,
-                delay: index * 100,
-                useNativeDriver: true,
-            }),
-        ]).start();
-
+    // Optimized MessageItem with fancy UI but no heavy animations
+    const MessageItem = React.memo(({ item, studentEmail, supervisors, navigation, unreadCounts, index }) => {
         const statusColors = {
-            Approved: colors.success,
-            Rejected: colors.danger,
-            Pending: colors.warning
+            Approved: '#00D4AA',
+            Rejected: '#FF6B9C',
+            Pending: '#F59E0B'
         };
 
         const statusIcons = {
@@ -353,41 +336,51 @@ const CommunicationTool = ({ navigation }) => {
             Pending: "time"
         };
 
+        const translateY = useRef(new Animated.Value(20)).current;
+        const opacity = useRef(new Animated.Value(0)).current;
+
+        useEffect(() => {
+            Animated.parallel([
+                Animated.timing(translateY, {
+                    toValue: 0,
+                    duration: 400,
+                    delay: index * 80,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(opacity, {
+                    toValue: 1,
+                    duration: 400,
+                    delay: index * 80,
+                    useNativeDriver: true,
+                })
+            ]).start();
+        }, []);
+
         return (
-            <Animated.View
+            <Animated.View 
                 style={[
-                    styles.messageBox,
-                    {
-                        opacity,
-                        transform: [{ translateY }],
-                        borderLeftWidth: 6,
-                        borderLeftColor: statusColors[item.status]
-                    },
+                    styles.messageItemWrapper,
+                    { opacity, transform: [{ translateY }] }
                 ]}
             >
-                <TouchableOpacity
-                    onPress={() => {
-                        if (item.status === "Approved") {
-                            navigation.navigate("ChatsScreen", {
-                                studentId: studentEmail,
-                                supervisorId: item.receiverId,
-                            });
-                        } else if (item.status === "Rejected") {
-                            setSelectedSupervisor(supervisors.find(s => s.email === item.receiverId));
-                            setActiveTab('supervisors');
-                        }
-                    }}
-                    style={{ paddingBottom: item.status !== "Approved" && item.status !== "Rejected" ? 0 : 10 }}
-                    activeOpacity={0.7}
-                >
+                <View style={[
+                    styles.messageBox,
+                    { borderLeftColor: statusColors[item.status] }
+                ]}>
+                    {/* Message Header */}
                     <View style={styles.messageHeader}>
-                        <View style={[styles.statusIndicator, { backgroundColor: statusColors[item.status] }]}>
+                        <LinearGradient
+                            colors={[statusColors[item.status], statusColors[item.status] + 'DD']}
+                            style={styles.statusIndicator}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
                             <Ionicons
                                 name={statusIcons[item.status]}
-                                size={16}
+                                size={18}
                                 color="white"
                             />
-                        </View>
+                        </LinearGradient>
                         <Text style={styles.supervisorText}>To: {item.receiverId.split('@')[0]}</Text>
                         <View style={[styles.statusBadge, { backgroundColor: statusColors[item.status] + '20' }]}>
                             <Text style={[styles.statusText, { color: statusColors[item.status] }]}>
@@ -396,133 +389,239 @@ const CommunicationTool = ({ navigation }) => {
                         </View>
                     </View>
 
+                    {/* Message Content */}
                     <Text style={styles.messageText}>{item.message}</Text>
-                </TouchableOpacity>
 
-                {item.status === "Approved" && (
-                    <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: colors.success }]}
-                        onPress={() =>
-                            navigation.navigate("ChatsScreen", {
-                                studentId: studentEmail,
-                                supervisorId: item.receiverId,
-                            })
-                        }
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="chatbubbles" size={18} color="white" />
-                        <Text style={styles.actionButtonText}>Open Chat</Text>
-                        {unreadCounts[item.receiverId] > 0 && (
-                            <View style={[styles.unreadBadge, { backgroundColor: colors.secondary }]}>
-                                <Text style={styles.unreadBadgeText}>
-                                    {unreadCounts[item.receiverId]}
-                                </Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                )}
+                    {/* Action Buttons */}
+                    {item.status === "Approved" && (
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() =>
+                                navigation.navigate("ChatsScreen", {
+                                    studentId: studentEmail,
+                                    supervisorId: item.receiverId,
+                                })
+                            }
+                            activeOpacity={0.9}
+                        >
+                            <LinearGradient
+                                colors={['#00D4AA', '#00B894']}
+                                style={styles.actionButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Ionicons name="chatbubbles" size={18} color="white" />
+                                <Text style={styles.actionButtonText}>Open Chat</Text>
+                                {unreadCounts[item.receiverId] > 0 && (
+                                    <View style={styles.unreadBadge}>
+                                        <Text style={styles.unreadBadgeText}>
+                                            {unreadCounts[item.receiverId]}
+                                        </Text>
+                                    </View>
+                                )}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    )}
 
-                {item.status === "Rejected" && (
-                    <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: colors.muted }]}
-                        onPress={() => {
-                            setSelectedSupervisor(supervisors.find(s => s.email === item.receiverId));
-                            setActiveTab('supervisors');
-                        }}
-                        activeOpacity={0.8}
+                    {item.status === "Rejected" && (
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => {
+                                const supervisor = supervisors.find(s => s.email === item.receiverId);
+                                if (supervisor) {
+                                    setSelectedSupervisor(supervisor);
+                                    setActiveTab('supervisors');
+                                }
+                            }}
+                            activeOpacity={0.9}
+                        >
+                            <LinearGradient
+                                colors={['#94A3B8', '#64748B']}
+                                style={styles.actionButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Ionicons name="refresh" size={18} color="white" />
+                                <Text style={styles.actionButtonText}>Try Another</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </Animated.View>
+        );
+    }, (prevProps, nextProps) => {
+        return (
+            prevProps.item.id === nextProps.item.id &&
+            prevProps.unreadCounts[prevProps.item.receiverId] === nextProps.unreadCounts[nextProps.item.receiverId]
+        );
+    });
+
+    const renderMessageItem = useCallback(({ item, index }) => (
+        <MessageItem
+            item={item}
+            index={index}
+            studentEmail={studentEmail}
+            supervisors={supervisors}
+            navigation={navigation}
+            unreadCounts={unreadCounts}
+        />
+    ), [studentEmail, supervisors, unreadCounts]);
+
+    const renderMessageInput = () => {
+        if (!selectedSupervisor) return null;
+        
+        return (
+            <Animated.View 
+                style={[
+                    styles.messageInputContainer,
+                    { opacity: fadeAnim }
+                ]}
+            >
+                <LinearGradient
+                    colors={['#FFFFFF', '#F8FAFC']}
+                    style={styles.messageInputGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    {/* Selected Supervisor Header */}
+                    <View style={styles.selectedSupervisorHeader}>
+                        <LinearGradient
+                            colors={['#8B5CF620', '#6366F120']}
+                            style={styles.selectedAvatar}
+                        >
+                            <Ionicons name="person" size={24} color="#8B5CF6" />
+                        </LinearGradient>
+                        <View style={styles.selectedSupervisorInfo}>
+                            <Text style={styles.selectedName}>{selectedSupervisor.name}</Text>
+                            <Text style={styles.selectedEmail}>{selectedSupervisor.email}</Text>
+                        </View>
+                        <View style={styles.typingIndicator}>
+                            <Ionicons name="ellipsis-horizontal" size={16} color="#8B5CF6" />
+                        </View>
+                    </View>
+                    
+                    {/* Message Input */}
+                    <Text style={styles.messageLabel}>
+                        ✨ Your Request Message
+                    </Text>
+                    <LinearGradient
+                        colors={['#F8FAFC', '#FFFFFF']}
+                        style={styles.textInputContainer}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
                     >
-                        <Ionicons name="refresh" size={18} color="white" />
-                        <Text style={styles.actionButtonText}>Try Another Supervisor</Text>
+                        <TextInput
+                            value={message}
+                            onChangeText={setMessage}
+                            placeholder="Write your amazing request message here... 🌟"
+                            placeholderTextColor="#94A3B8"
+                            style={styles.textInput}
+                            multiline
+                            textAlignVertical="top"
+                        />
+                    </LinearGradient>
+
+                    {/* Send Button */}
+                    <TouchableOpacity
+                        style={styles.sendButton}
+                        onPress={sendRequest}
+                        activeOpacity={0.9}
+                    >
+                        <LinearGradient
+                            colors={['#8B5CF6', '#6366F1', '#4F46E5']}
+                            style={styles.sendButtonGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Ionicons name="send" size={20} color="white" />
+                            <Text style={styles.sendButtonText}>🚀 Send Request</Text>
+                        </LinearGradient>
                     </TouchableOpacity>
-                )}
+                </LinearGradient>
             </Animated.View>
         );
     };
 
-    const renderMessageInput = () => {
-        if (!selectedSupervisor) return null;
-        return (
-            <View style={styles.messageInputContainer}>
-                <View style={styles.selectedSupervisorHeader}>
-                    <LinearGradient
-                        colors={[colors.primary + '20', colors.secondary + '20']}
-                        style={styles.selectedAvatar}
-                    >
-                        <Ionicons name="person" size={24} color={colors.primary} />
-                    </LinearGradient>
-                    <View>
-                        <Text style={styles.selectedName}>{selectedSupervisor.name}</Text>
-                        <Text style={styles.selectedEmail}>{selectedSupervisor.email}</Text>
-                    </View>
-                </View>
-                
-                <Text style={styles.messageLabel}>
-                    Your Request Message
-                </Text>
-                <TextInput
-                    value={message}
-                    onChangeText={setMessage}
-                    placeholder="Write your request message here..."
-                    placeholderTextColor={colors.muted}
-                    style={styles.textInput}
-                    multiline
-                    textAlignVertical="top"
-                />
-                <TouchableOpacity
-                    style={styles.sendButton}
-                    onPress={sendRequest}
-                    activeOpacity={0.9}
-                >
-                    <LinearGradient
-                        colors={[colors.primary, colors.secondary]}
-                        style={styles.gradientButton}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                    >
-                        <Ionicons name="send" size={20} color="white" />
-                        <Text style={styles.sendButtonText}>Send Request</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
-            </View>
-        );
-    };
+    // Optimized FlatList configuration for performance
+    const getItemLayout = useCallback((data, index) => ({
+        length: 160,
+        offset: 160 * index,
+        index,
+    }), []);
+
+    const keyExtractor = useCallback((item) => item.id || item.email, []);
 
     return (
-        // SafeAreaView commented out temporarily
-        // <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-            <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-                {/* Header */}
+        <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+            {/* Premium Header */}
+            <Animated.View 
+                style={[
+                    styles.header,
+                    { 
+                        opacity: headerAnim,
+                        transform: [{
+                            translateY: headerAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [-50, 0]
+                            })
+                        }]
+                    }
+                ]}
+            >
                 <LinearGradient
-                    colors={[colors.primary, colors.secondary]}
-                    style={styles.header}
+                    colors={['#8B5CF6', '#6366F1', '#4F46E5']}
+                    style={styles.headerGradient}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                 >
+                    {/* Header Background Elements */}
+                    <View style={styles.headerOrb1} />
+                    <View style={styles.headerOrb2} />
+                    
                     <View style={styles.headerContent}>
-                        <View style={styles.headerIcon}>
-                            <Ionicons name="chatbox-ellipses" size={28} color="white" />
+                        <View style={styles.headerIconContainer}>
+                            <Ionicons name="chatbox-ellipses" size={32} color="white" />
                         </View>
-                        <View>
-                            <Text style={styles.headerTitle}>Communication Tool</Text>
-                            <Text style={styles.headerSubtitle}>Connect with supervisors</Text>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Communication Hub</Text>
+                            <Text style={styles.headerSubtitle}>Connect with Expert Supervisors</Text>
                         </View>
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                            style={styles.headerBadge}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Text style={styles.headerBadgeText}>{supervisors.length}</Text>
+                            <Text style={styles.headerBadgeLabel}>Available</Text>
+                        </LinearGradient>
                     </View>
                 </LinearGradient>
+            </Animated.View>
 
-                {/* Tab Navigation */}
-                <View style={styles.tabContainer}>
-                    <TouchableOpacity
-                        style={[
-                            styles.tabButton,
-                            activeTab === 'supervisors' && styles.activeTab
-                        ]}
-                        onPress={() => setActiveTab('supervisors')}
-                        activeOpacity={0.7}
+            {/* Premium Tab Navigation */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[
+                        styles.tab,
+                        activeTab === 'supervisors' && styles.activeTab
+                    ]}
+                    onPress={() => setActiveTab('supervisors')}
+                    activeOpacity={0.8}
+                >
+                    <LinearGradient
+                        colors={activeTab === 'supervisors' ? 
+                            ['#8B5CF6', '#6366F1'] : 
+                            ['#F8FAFC', '#F1F5F9']
+                        }
+                        style={styles.tabGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
                     >
                         <Ionicons 
                             name="people" 
-                            size={20} 
-                            color={activeTab === 'supervisors' ? colors.primary : colors.muted} 
+                            size={22} 
+                            color={activeTab === 'supervisors' ? 'white' : '#8B5CF6'} 
                         />
                         <Text style={[
                             styles.tabText,
@@ -530,20 +629,30 @@ const CommunicationTool = ({ navigation }) => {
                         ]}>
                             Supervisors
                         </Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                        style={[
-                            styles.tabButton,
-                            activeTab === 'requests' && styles.activeTab
-                        ]}
-                        onPress={() => setActiveTab('requests')}
-                        activeOpacity={0.7}
+                    </LinearGradient>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                    style={[
+                        styles.tab,
+                        activeTab === 'requests' && styles.activeTab
+                    ]}
+                    onPress={() => setActiveTab('requests')}
+                    activeOpacity={0.8}
+                >
+                    <LinearGradient
+                        colors={activeTab === 'requests' ? 
+                            ['#8B5CF6', '#6366F1'] : 
+                            ['#F8FAFC', '#F1F5F9']
+                        }
+                        style={styles.tabGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
                     >
                         <Ionicons 
                             name="document-text" 
-                            size={20} 
-                            color={activeTab === 'requests' ? colors.primary : colors.muted} 
+                            size={22} 
+                            color={activeTab === 'requests' ? 'white' : '#8B5CF6'} 
                         />
                         <Text style={[
                             styles.tabText,
@@ -552,119 +661,122 @@ const CommunicationTool = ({ navigation }) => {
                             My Requests
                         </Text>
                         {sentMessages.length > 0 && (
-                            <View style={[styles.tabBadge, { backgroundColor: colors.primary }]}>
+                            <View style={[
+                                styles.tabBadge,
+                                { backgroundColor: activeTab === 'requests' ? 'rgba(255,255,255,0.3)' : '#FF6B9C' }
+                            ]}>
                                 <Text style={styles.tabBadgeText}>{sentMessages.length}</Text>
                             </View>
                         )}
-                    </TouchableOpacity>
+                    </LinearGradient>
+                </TouchableOpacity>
+            </View>
+
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#8B5CF6" />
+                    <Text style={styles.loadingText}>Loading Supervisors...</Text>
+                    <Text style={styles.loadingSubtext}>Preparing your communication hub</Text>
                 </View>
-
-                {loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                        <Text style={styles.loadingText}>Loading supervisors...</Text>
-                    </View>
-                ) : (
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={{ flex: 1 }}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-                    >
-                        <FlatList
-                            data={activeTab === 'supervisors' ? supervisors : sentMessages}
-                            keyExtractor={(item) => item.id || item.email}
-                            renderItem={activeTab === 'supervisors' ? renderSupervisorItem : renderMessageItem}
-                            ListHeaderComponent={() => (
-                                <View style={styles.listHeader}>
-                                    <Text style={styles.sectionTitle}>
-                                        {activeTab === 'supervisors' ? 'Available Supervisors' : 'Your Requests'}
-                                    </Text>
-                                    <Text style={styles.sectionSubtitle}>
-                                        {activeTab === 'supervisors' ? 'Select one to send a request' : 'Status of your sent requests'}
-                                    </Text>
-                                </View>
-                            )}
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer}>
-                                    <Ionicons 
-                                        name={activeTab === 'supervisors' ? "people-outline" : "mail-open-outline"} 
-                                        size={64} 
-                                        color={colors.muted} 
-                                    />
-                                    <Text style={styles.emptyTitle}>
-                                        {activeTab === 'supervisors' ? 'No supervisors available' : 'No requests sent yet'}
-                                    </Text>
-                                    <Text style={styles.emptySubtitle}>
-                                        {activeTab === 'supervisors' 
-                                            ? 'Check back later for available supervisors' 
-                                            : 'Send a request to a supervisor to get started'
-                                        }
-                                    </Text>
-                                    {activeTab === 'requests' && (
-                                        <TouchableOpacity
-                                            style={styles.primaryButton}
-                                            onPress={() => setActiveTab('supervisors')}
-                                            activeOpacity={0.8}
-                                        >
-                                            <LinearGradient
-                                                colors={[colors.primary, colors.secondary]}
-                                                style={styles.primaryButtonGradient}
-                                                start={{ x: 0, y: 0 }}
-                                                end={{ x: 1, y: 0 }}
-                                            >
-                                                <Ionicons name="search" size={20} color="white" />
-                                                <Text style={styles.primaryButtonText}>Find a Supervisor</Text>
-                                            </LinearGradient>
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            }
-                            ListFooterComponent={activeTab === 'supervisors' ? renderMessageInput() : null}
-                            contentContainerStyle={styles.flatListContainer}
-                            extraData={selectedSupervisor}
-                            showsVerticalScrollIndicator={false}
-                        />
-                    </KeyboardAvoidingView>
-                )}
-
-                {/* Dialog Modal */}
-                <Modal visible={showDialog} transparent animationType="fade">
-                    <View style={styles.modalOverlay}>
-                        <Animated.View style={[styles.modalContainer, {
-                            transform: [{
-                                scale: fadeAnim.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [0.9, 1]
-                                })
-                            }]
-                        }]}>
-                            <View style={styles.modalIcon}>
-                                <Ionicons
-                                    name={dialogMessage.includes("successfully") ? "checkmark-circle" : "alert-circle"}
-                                    size={48}
-                                    color={dialogMessage.includes("successfully") ? colors.success : colors.danger}
-                                />
+            ) : (
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={{ flex: 1 }}
+                >
+                    <FlatList
+                        data={activeTab === 'supervisors' ? supervisors : sentMessages}
+                        keyExtractor={keyExtractor}
+                        renderItem={activeTab === 'supervisors' ? renderSupervisorItem : renderMessageItem}
+                        getItemLayout={activeTab === 'supervisors' ? getItemLayout : undefined}
+                        initialNumToRender={8}
+                        maxToRenderPerBatch={8}
+                        windowSize={5}
+                        removeClippedSubviews={Platform.OS === 'android'}
+                        updateCellsBatchingPeriod={100}
+                        ListHeaderComponent={() => (
+                            <View style={styles.listHeader}>
+                                <Text style={styles.sectionTitle}>
+                                    {activeTab === 'supervisors' ? 'Available Supervisors' : 'Your Requests'}
+                                </Text>
+                                <Text style={styles.sectionSubtitle}>
+                                    {activeTab === 'supervisors' 
+                                        ? 'Select one to send a request' 
+                                        : 'Track your communication status'
+                                    }
+                                </Text>
                             </View>
+                        )}
+                        ListEmptyComponent={() => (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons 
+                                    name={activeTab === 'supervisors' ? "people-outline" : "mail-open-outline"} 
+                                    size={80} 
+                                    color="#8B5CF6" 
+                                />
+                                <Text style={styles.emptyTitle}>
+                                    {activeTab === 'supervisors' ? 'No Supervisors Available' : 'No Requests Sent Yet'}
+                                </Text>
+                                <Text style={styles.emptySubtitle}>
+                                    {activeTab === 'supervisors' 
+                                        ? 'Supervisors will appear here when available' 
+                                        : 'Send your first request to get started'
+                                    }
+                                </Text>
+                            </View>
+                        )}
+                        ListFooterComponent={activeTab === 'supervisors' ? renderMessageInput() : null}
+                        contentContainerStyle={styles.flatListContainer}
+                        extraData={selectedSupervisor}
+                        showsVerticalScrollIndicator={false}
+                    />
+                </KeyboardAvoidingView>
+            )}
+
+            {/* Premium Dialog */}
+            <Modal visible={showDialog} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <Animated.View 
+                        style={[
+                            styles.modalContainer,
+                            { opacity: fadeAnim }
+                        ]}
+                    >
+                        <LinearGradient
+                            colors={['#8B5CF6', '#6366F1']}
+                            style={styles.modalHeader}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Ionicons
+                                name={dialogMessage.includes("🎉") ? "checkmark-circle" : "alert-circle"}
+                                size={48}
+                                color="white"
+                            />
+                        </LinearGradient>
+                        <View style={styles.modalBody}>
+                            <Text style={styles.modalTitle}>
+                                {dialogMessage.includes("🎉") ? "Success!" : "Notice"}
+                            </Text>
                             <Text style={styles.modalText}>{dialogMessage}</Text>
-                            <TouchableOpacity
-                                style={styles.modalButton}
-                                onPress={() => setShowDialog(false)}
-                                activeOpacity={0.8}
+                        </View>
+                        <TouchableOpacity
+                            style={styles.modalButton}
+                            onPress={() => setShowDialog(false)}
+                            activeOpacity={0.9}
+                        >
+                            <LinearGradient
+                                colors={['#8B5CF6', '#6366F1']}
+                                style={styles.modalButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
                             >
-                                <LinearGradient
-                                    colors={[colors.primary, colors.secondary]}
-                                    style={styles.modalButtonGradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                >
-                                    <Text style={styles.modalButtonText}>Got it!</Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </Animated.View>
-                    </View>
-                </Modal>
-            </Animated.View>
-        // </SafeAreaView>
+                                <Text style={styles.modalButtonText}>Continue</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </View>
+            </Modal>
+        </Animated.View>
     );
 };
 
@@ -672,136 +784,185 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
-        paddingTop: 35
     },
+    // Premium Header
     header: {
-        paddingVertical: 24,
-        paddingHorizontal: 20,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+        height: 160,
+    },
+    headerGradient: {
+        flex: 1,
+        paddingTop: 30,
+        paddingHorizontal: 25,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    headerOrb1: {
+        position: 'absolute',
+        top: -50,
+        right: -30,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    headerOrb2: {
+        position: 'absolute',
+        bottom: -40,
+        left: -40,
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(255,255,255,0.05)',
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom:90
+
     },
-    headerIcon: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+    headerIconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 20,
         backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+    },
+    headerTextContainer: {
+        flex: 1,
+        marginLeft: 15,
     },
     headerTitle: {
-        fontSize: 24,
-        fontWeight: '800',
+        fontSize: 28,
+        fontWeight: 'bold',
         color: 'white',
-        letterSpacing: 0.5,
+        marginBottom: 4,
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.8)',
-        marginTop: 2,
-        fontWeight: '500',
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.9)',
     },
+    headerBadge: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 15,
+        alignItems: 'center',
+    },
+    headerBadgeText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 20,
+    },
+    headerBadgeLabel: {
+        color: 'white',
+        fontSize: 12,
+        opacity: 0.9,
+    },
+    // Premium Tabs
     tabContainer: {
         flexDirection: 'row',
-        marginHorizontal: 20,
-        marginVertical: 20,
+        marginHorizontal: 25,
+        marginTop: -25,
+        borderRadius: 20,
+        padding: 8,
         backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowColor: '#8B5CF6',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
     },
-    tabButton: {
+    tab: {
         flex: 1,
+        borderRadius: 15,
+        overflow: 'hidden',
+        marginHorizontal: 4,
+    },
+    tabGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 15,
         gap: 8,
     },
-    activeTab: {
-        backgroundColor: '#F8FAFC',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
     tabText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#94A3B8',
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#8B5CF6',
     },
     activeTabText: {
-        color: '#B22222',
+        color: 'white',
     },
     tabBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
         borderRadius: 10,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        minWidth: 20,
-        alignItems: 'center',
+        marginLeft: 8,
     },
     tabBadgeText: {
         color: 'white',
         fontSize: 12,
         fontWeight: 'bold',
     },
+    // List Styles
     listHeader: {
-        paddingHorizontal: 20,
+        paddingHorizontal: 25,
+        marginBottom: 20,
         marginTop: 10,
-        marginBottom: 10,
     },
     sectionTitle: {
         fontSize: 24,
-        fontWeight: '800',
+        fontWeight: 'bold',
         color: '#1E293B',
         marginBottom: 4,
     },
     sectionSubtitle: {
-        fontSize: 15,
+        fontSize: 16,
         color: '#64748B',
-        fontWeight: '500',
     },
     flatListContainer: {
         paddingBottom: 30,
         flexGrow: 1,
     },
+    // Supervisor Items
+    supervisorItemWrapper: {
+        marginHorizontal: 25,
+        marginBottom: 12,
+    },
     supervisorItem: {
         backgroundColor: 'white',
         borderRadius: 20,
-        marginHorizontal: 20,
-        marginBottom: 12,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+        elevation: 5,
+        position: 'relative',
+    },
+    selectedSupervisor: {
+        backgroundColor: '#8B5CF6',
+    },
+    unavailableSupervisor: {
+        opacity: 0.6,
+    },
+    avatarGradient: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 4,
-        overflow: 'hidden',
-    },
-    selectedSupervisor: {
-        borderWidth: 2,
-        borderColor: '#B22222',
-        backgroundColor: '#B22222',
-    },
-    supervisorContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 20,
-        position: 'relative',
+        shadowRadius: 6,
+        elevation: 3,
     },
     avatarContainer: {
         width: 56,
@@ -809,21 +970,16 @@ const styles = StyleSheet.create({
         borderRadius: 28,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
+        backgroundColor: 'transparent',
     },
     supervisorInfo: {
         flex: 1,
     },
     supervisorName: {
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: 'bold',
         color: '#1E293B',
-        marginBottom: 2,
+        marginBottom: 4,
     },
     supervisorSpecialty: {
         fontSize: 14,
@@ -835,22 +991,33 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#94A3B8',
     },
+    selectedText: {
+        color: 'white',
+    },
     selectedIndicator: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'white',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
-        shadowRadius: 2,
-        elevation: 2,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    glowEffect: {
+        position: 'absolute',
+        top: -2,
+        left: -2,
+        right: -2,
+        bottom: -2,
+        borderRadius: 22,
+        borderWidth: 2,
+        borderColor: '#8B5CF6',
     },
     limitedBadge: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
         backgroundColor: '#FEF3C7',
         paddingHorizontal: 8,
         paddingVertical: 4,
@@ -858,97 +1025,117 @@ const styles = StyleSheet.create({
     },
     limitedText: {
         fontSize: 10,
-        fontWeight: '700',
+        fontWeight: 'bold',
         color: '#D97706',
     },
+    // Message Input
     messageInputContainer: {
-        backgroundColor: 'white',
-        borderRadius: 20,
-        margin: 20,
-        padding: 20,
+        marginHorizontal: 25,
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    messageInputGradient: {
+        borderRadius: 25,
+        padding: 25,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
-        marginTop: 10,
+        shadowRadius: 20,
+        elevation: 8,
     },
     selectedSupervisorHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 16,
-        paddingBottom: 16,
+        marginBottom: 20,
+        paddingBottom: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
     },
     selectedAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        marginRight: 15,
+    },
+    selectedSupervisorInfo: {
+        flex: 1,
     },
     selectedName: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: 'bold',
         color: '#1E293B',
+        marginBottom: 2,
     },
     selectedEmail: {
-        fontSize: 13,
+        fontSize: 14,
         color: '#64748B',
-        marginTop: 2,
+    },
+    typingIndicator: {
+        padding: 8,
+        borderRadius: 10,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
     },
     messageLabel: {
-        fontSize: 15,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: 'bold',
         color: '#1E293B',
-        marginBottom: 8,
+        marginBottom: 12,
+    },
+    textInputContainer: {
+        borderRadius: 16,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        marginBottom: 20,
     },
     textInput: {
-        minHeight: 100,
-        borderWidth: 1.5,
-        borderColor: "#E2E8F0",
-        borderRadius: 16,
+        minHeight: 120,
         padding: 16,
-        fontSize: 15,
+        fontSize: 16,
         color: '#1E293B',
-        textAlignVertical: "top",
-        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        backgroundColor: 'transparent',
+        textAlignVertical: 'top',
     },
     sendButton: {
         borderRadius: 16,
-        marginTop: 16,
         overflow: 'hidden',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
+        shadowOffset: { width: 0, height: 5 },
         shadowOpacity: 0.3,
-        shadowRadius: 6,
-        elevation: 4,
+        shadowRadius: 10,
+        elevation: 5,
     },
-    gradientButton: {
-        padding: 16,
+    sendButtonGradient: {
+        paddingVertical: 18,
+        paddingHorizontal: 24,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
     },
     sendButtonText: {
         color: 'white',
-        fontWeight: '700',
+        fontWeight: 'bold',
         fontSize: 16,
+    },
+    // Message Items
+    messageItemWrapper: {
+        marginHorizontal: 25,
+        marginBottom: 12,
     },
     messageBox: {
         backgroundColor: 'white',
         borderRadius: 20,
         padding: 20,
-        marginHorizontal: 20,
-        marginBottom: 12,
+        borderLeftWidth: 6,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
+        shadowOffset: { width: 0, height: 5 },
         shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 4,
+        shadowRadius: 15,
+        elevation: 5,
     },
     messageHeader: {
         flexDirection: 'row',
@@ -956,47 +1143,45 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     statusIndicator: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
     supervisorText: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '600',
         color: '#1E293B',
         flex: 1,
     },
     statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 12,
     },
     statusText: {
-        fontSize: 13,
-        fontWeight: '700',
+        fontSize: 12,
+        fontWeight: 'bold',
     },
     messageText: {
         fontSize: 15,
         color: '#475569',
         lineHeight: 22,
-        marginBottom: 12,
+        marginBottom: 15,
     },
     actionButton: {
-        padding: 14,
         borderRadius: 12,
+        overflow: 'hidden',
+    },
+    actionButtonGradient: {
+        padding: 16,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        gap: 8,
         position: 'relative',
-        gap: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
     },
     actionButtonText: {
         color: 'white',
@@ -1004,20 +1189,19 @@ const styles = StyleSheet.create({
         fontSize: 15,
     },
     unreadBadge: {
-        position: 'absolute',
-        top: -6,
-        right: -6,
         borderRadius: 10,
         width: 20,
         height: 20,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#FF6B9C',
     },
     unreadBadgeText: {
         color: 'white',
         fontSize: 11,
         fontWeight: 'bold',
     },
+    // Loading States
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -1025,107 +1209,98 @@ const styles = StyleSheet.create({
         padding: 40,
     },
     loadingText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1E293B',
         marginTop: 16,
-        fontSize: 16,
-        color: '#64748B',
-        fontWeight: '500',
+        marginBottom: 8,
     },
+    loadingSubtext: {
+        fontSize: 14,
+        color: '#64748B',
+        textAlign: 'center',
+    },
+    // Empty States
     emptyContainer: {
         justifyContent: 'center',
         alignItems: 'center',
         padding: 40,
-        marginHorizontal: 20,
+        marginHorizontal: 25,
         marginTop: 20,
         backgroundColor: 'white',
-        borderRadius: 20,
+        borderRadius: 25,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 5 },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowRadius: 15,
+        elevation: 5,
     },
     emptyTitle: {
-        marginTop: 16,
-        fontSize: 18,
+        marginTop: 20,
+        fontSize: 20,
+        fontWeight: 'bold',
         color: '#1E293B',
-        fontWeight: '700',
         textAlign: 'center',
+        marginBottom: 8,
     },
     emptySubtitle: {
-        marginTop: 8,
-        fontSize: 14,
+        fontSize: 15,
         color: '#64748B',
         textAlign: 'center',
-        lineHeight: 20,
+        lineHeight: 22,
     },
-    primaryButton: {
-        borderRadius: 16,
-        marginTop: 20,
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    primaryButtonGradient: {
-        paddingVertical: 14,
-        paddingHorizontal: 24,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 8,
-    },
-    primaryButtonText: {
-        color: 'white',
-        fontWeight: '700',
-        fontSize: 15,
-    },
+    // Premium Modal
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 25,
     },
     modalContainer: {
-        backgroundColor: 'white',
-        borderRadius: 24,
-        padding: 24,
         width: '100%',
-        maxWidth: 320,
-        alignItems: 'center',
+        borderRadius: 25,
+        overflow: 'hidden',
+        backgroundColor: '#FFF',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
+        shadowOffset: { width: 0, height: 20 },
         shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowRadius: 30,
+        elevation: 15,
     },
-    modalIcon: {
-        marginBottom: 16,
+    modalHeader: {
+        padding: 30,
+        alignItems: 'center',
+    },
+    modalBody: {
+        padding: 30,
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1E293B',
+        marginBottom: 12,
     },
     modalText: {
         fontSize: 16,
-        color: '#374151',
+        color: '#64748B',
         textAlign: 'center',
-        marginVertical: 16,
         lineHeight: 24,
-        fontWeight: '500',
     },
     modalButton: {
+        margin: 20,
         borderRadius: 16,
-        marginTop: 8,
         overflow: 'hidden',
-        width: '100%',
     },
     modalButtonGradient: {
-        paddingVertical: 14,
-        paddingHorizontal: 24,
+        paddingVertical: 16,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     modalButtonText: {
         color: 'white',
-        fontWeight: '700',
+        fontWeight: 'bold',
         fontSize: 16,
     },
 });

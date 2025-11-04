@@ -64,8 +64,9 @@ const ProjectSubmissionScreen = () => {
   const [activeTab, setActiveTab] = useState('recommendations');
 
   const blinkAnim = useRef(new Animated.Value(0)).current;
-  const blinkButtonAnim = useRef(new Animated.Value(0)).current;
+  const blinkButtonAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Fetch user email on mount
   useEffect(() => {
@@ -128,14 +129,14 @@ const ProjectSubmissionScreen = () => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(blinkButtonAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: false,
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
         }),
         Animated.timing(blinkButtonAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: false,
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
         }),
       ])
     ).start();
@@ -149,12 +150,12 @@ const ProjectSubmissionScreen = () => {
           Animated.timing(blinkAnim, {
             toValue: 1,
             duration: 500,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
           Animated.timing(blinkAnim, {
-            toValue: 0,
+            toValue: 0.3,
             duration: 500,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
         ])
       ).start();
@@ -170,14 +171,51 @@ const ProjectSubmissionScreen = () => {
     }).start();
   }, []);
 
+  // Pulse animation for cards
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.02,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
   const showDialog = (msg) => {
     setDialogMessage(msg);
     setDialogVisible(true);
   };
 
+  // ✅ NEW SECURITY FUNCTION: Check if project already requested
+  const hasAlreadyRequestedProject = (projectTitle, supervisorEmail) => {
+    const cleanedStudentEmail = userEmail?.trim().toLowerCase();
+    const cleanedSupervisorEmail = supervisorEmail?.trim().toLowerCase();
+    const cleanedProjectTitle = projectTitle?.trim().toLowerCase();
+
+    return requests.some(request => 
+      request.studentEmail === cleanedStudentEmail &&
+      request.supervisorEmail === cleanedSupervisorEmail &&
+      request.projectTitle.toLowerCase() === cleanedProjectTitle &&
+      request.status !== 'rejected' // Allow re-sending if previously rejected
+    );
+  };
+
   const sendProjectRequest = async () => {
     if (!selectedProject || !supervisorEmail || !description) {
         return showDialog('⚠️ Please fill all fields');
+    }
+
+    // ✅ NEW SECURITY CHECK: Prevent duplicate project requests
+    if (hasAlreadyRequestedProject(selectedProject.title, supervisorEmail)) {
+        return showDialog('❌ You have already sent a request for this project to this supervisor.');
     }
 
     setIsLoading(true);
@@ -193,7 +231,7 @@ const ProjectSubmissionScreen = () => {
         }
 
         const token = await getAuth().currentUser.getIdToken();
-        const res = await fetch("http://10.31.137.71:3000/api/supervision-status", {
+        const res = await fetch("https://backendsuperviseme.vercel.app/api/supervision-status", {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -246,53 +284,85 @@ const ProjectSubmissionScreen = () => {
         setIsLoading(false);
         showDialog('❌ Failed to send request');
     }
-};
+  };
 
   const openStatusDialog = (status, comment) => {
     setCurrentStatus({ status, comment });
     setStatusModal(true);
   };
 
-  const renderCard = (item) => (
-    <Animatable.View
-      animation="fadeInUp"
-      duration={500}
-      useNativeDriver
-    >
-      <LinearGradient
-        colors={['#FFFFFF', '#F8FAFF']}
-        style={styles.card}
+  // ✅ Enhanced renderCard function with security check
+  const renderCard = (item) => {
+    const hasRequested = hasAlreadyRequestedProject(item.title, supervisorEmail);
+    
+    return (
+      <Animatable.View
+        animation="fadeInUp"
+        duration={500}
+        useNativeDriver
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.cardIconContainer}>
-            <Ionicons name="document-text" size={20} color="#6C63FF" />
-          </View>
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardSub}>Status: {item.status}</Text>
-          </View>
-        </View>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => {
-              setSelectedProject(item);
-              setShowRequestModal(true);
-            }}
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <LinearGradient
+            colors={['#FFFFFF', '#F8FAFF']}
+            style={styles.card}
           >
-            <Text style={styles.btnTxt}>Send Request</Text>
-            <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 8 }} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => deleteProject(item.id)}
-          >
-            <Ionicons name="trash" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    </Animatable.View>
-  );
+            <View style={styles.cardHeader}>
+              <View style={styles.cardIconContainer}>
+                <Ionicons name="document-text" size={20} color="#6C63FF" />
+              </View>
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardSub}>Status: {item.status}</Text>
+                {/* ✅ Show warning if already requested */}
+                {hasRequested && (
+                  <View style={styles.warningContainer}>
+                    <Ionicons name="warning" size={14} color="#FFA726" />
+                    <Text style={styles.warningText}>Already requested</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  hasRequested && styles.disabledBtn
+                ]}
+                onPress={() => {
+                  if (hasRequested) {
+                    showDialog('⚠️ You have already sent a request for this project.');
+                    return;
+                  }
+                  setSelectedProject(item);
+                  setShowRequestModal(true);
+                }}
+                disabled={hasRequested}
+              >
+                <Text style={[
+                  styles.btnTxt,
+                  hasRequested && styles.disabledBtnTxt
+                ]}>
+                  {hasRequested ? 'Already Requested' : 'Send Request'}
+                </Text>
+                <Ionicons 
+                  name={hasRequested ? "checkmark" : "send"} 
+                  size={16} 
+                  color={hasRequested ? "#999" : "#fff"} 
+                  style={{ marginLeft: 8 }} 
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => deleteProject(item.id)}
+              >
+                <Ionicons name="trash" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      </Animatable.View>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -317,7 +387,7 @@ const ProjectSubmissionScreen = () => {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#f0f4ff' }}
+      style={{ flex: 1, backgroundColor: '#f8faff' }}
     >
       <StatusBar backgroundColor="#667eea" barStyle="light-content" />
       
@@ -325,10 +395,10 @@ const ProjectSubmissionScreen = () => {
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <View style={styles.headerContent}>
           <Animatable.View animation="fadeInDown" duration={800}>
-            <Text style={styles.headerTxt}>Project Tracking</Text>
+            <Text style={styles.headerTxt}>Project Hub</Text>
           </Animatable.View>
           <Animatable.View animation="fadeInDown" duration={800} delay={200}>
-            <Text style={styles.headerSubTxt}>Manage your academic projects efficiently</Text>
+            <Text style={styles.headerSubTxt}>Manage your academic journey</Text>
           </Animatable.View>
         </View>
         <View style={styles.headerDecoration}>
@@ -336,7 +406,7 @@ const ProjectSubmissionScreen = () => {
         </View>
       </LinearGradient>
 
-      {/* Tab Navigation */}
+      {/* Enhanced Tab Navigation */}
       <View style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
           {['recommendations', 'requests', 'assigned', 'direct'].map((tab) => (
@@ -345,11 +415,26 @@ const ProjectSubmissionScreen = () => {
               style={[styles.tab, activeTab === tab && styles.activeTab]}
               onPress={() => setActiveTab(tab)}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                {tab === 'recommendations' ? 'Recommended' :
-                 tab === 'requests' ? 'Requests' :
-                 tab === 'assigned' ? 'Assigned' : 'Direct'}
-              </Text>
+              <LinearGradient
+                colors={activeTab === tab ? ['#6C63FF', '#8A7CFF'] : ['transparent', 'transparent']}
+                style={styles.tabGradient}
+              >
+                <Ionicons 
+                  name={
+                    tab === 'recommendations' ? 'bulb' :
+                    tab === 'requests' ? 'paper-plane' :
+                    tab === 'assigned' ? 'checkmark-done' : 'create'
+                  } 
+                  size={16} 
+                  color={activeTab === tab ? '#fff' : '#6C63FF'} 
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                  {tab === 'recommendations' ? 'Recommended' :
+                   tab === 'requests' ? 'Requests' :
+                   tab === 'assigned' ? 'Assigned' : 'Direct'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -363,7 +448,7 @@ const ProjectSubmissionScreen = () => {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {/* Recommendations Banner */}
+        {/* Enhanced Recommendations Banner */}
         <Animatable.View
           animation="fadeIn"
           duration={800}
@@ -377,7 +462,7 @@ const ProjectSubmissionScreen = () => {
               <View style={styles.bannerTextContainer}>
                 <Text style={styles.bannerTitle}>Smart Recommendations</Text>
                 <Text style={styles.bannerTxt}>
-                  Based on your interests, these projects might be perfect for you.
+                  Discover projects tailored to your academic interests
                 </Text>
               </View>
             </View>
@@ -386,7 +471,7 @@ const ProjectSubmissionScreen = () => {
               onPress={() => setShowRecommendations((p) => !p)}
             >
               <Text style={styles.bannerBtnTxt}>
-                {showRecommendations ? 'Hide Recommendations' : 'View Recommendations'}
+                {showRecommendations ? 'Hide' : 'View'} Recommendations
               </Text>
               <Ionicons
                 name={showRecommendations ? 'chevron-up' : 'chevron-down'}
@@ -430,7 +515,7 @@ const ProjectSubmissionScreen = () => {
           </Animatable.View>
         )}
 
-        {/* Sent Requests */}
+        {/* Enhanced Sent Requests Section */}
         {(activeTab === 'requests' || !activeTab) && (
           <Animatable.View
             animation="fadeInUp"
@@ -495,18 +580,16 @@ const ProjectSubmissionScreen = () => {
                       {req.status === 'approved' ? (
                         <Animated.View
                           style={{
-                            opacity: blinkButtonAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [1, 0.3],
-                            }),
+                            opacity: blinkButtonAnim,
+                            transform: [{ scale: blinkButtonAnim }]
                           }}
                         >
                           <TouchableOpacity
                             onPress={() => openStatusDialog(req.status, req.comment)}
                             style={styles.successBtn}
                           >
+                            <Ionicons name="checkmark-circle" size={16} color="#fff" />
                             <Text style={styles.btnTxt}>View Status</Text>
-                            <Ionicons name="checkmark-circle" size={16} color="#fff" style={{ marginLeft: 8 }} />
                           </TouchableOpacity>
                         </Animated.View>
                       ) : (
@@ -514,8 +597,8 @@ const ProjectSubmissionScreen = () => {
                           onPress={() => openStatusDialog(req.status, req.comment)}
                           style={styles.secondaryBtn}
                         >
+                          <Ionicons name="information-circle" size={16} color="#fff" />
                           <Text style={styles.btnTxt}>View Status</Text>
-                          <Ionicons name="information-circle" size={16} color="#fff" style={{ marginLeft: 8 }} />
                         </TouchableOpacity>
                       )}
                       <TouchableOpacity
@@ -532,7 +615,7 @@ const ProjectSubmissionScreen = () => {
           </Animatable.View>
         )}
 
-        {/* Assigned Projects */}
+        {/* Enhanced Assigned Projects */}
         {(activeTab === 'assigned' || !activeTab) && (
           <Animatable.View
             animation="fadeInUp"
@@ -543,7 +626,7 @@ const ProjectSubmissionScreen = () => {
               <LinearGradient colors={['#4ECDC4', '#66D6D6']} style={styles.sectionIcon}>
                 <Ionicons name="checkmark-done" size={20} color="#fff" />
               </LinearGradient>
-              <Text style={styles.sectionTitle}>Assigned via Requests</Text>
+              <Text style={styles.sectionTitle}>Assigned Projects</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{filteredAssignedProjectsFromRequests.length}</Text>
               </View>
@@ -596,7 +679,7 @@ const ProjectSubmissionScreen = () => {
           </Animatable.View>
         )}
 
-        {/* Directly Assigned */}
+        {/* Enhanced Directly Assigned */}
         {(activeTab === 'direct' || !activeTab) && (
           <Animatable.View
             animation="fadeInUp"
@@ -607,7 +690,7 @@ const ProjectSubmissionScreen = () => {
               <LinearGradient colors={['#FFA726', '#FFB74D']} style={styles.sectionIcon}>
                 <Ionicons name="create" size={20} color="#fff" />
               </LinearGradient>
-              <Text style={styles.sectionTitle}>Directly Assigned</Text>
+              <Text style={styles.sectionTitle}>Direct Assignments</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{filteredDirectlyAssignedProjects.length}</Text>
               </View>
@@ -701,6 +784,16 @@ const ProjectSubmissionScreen = () => {
                 <Text style={styles.projectTitle}>{selectedProject?.title}</Text>
               </View>
               
+              {/* ✅ Security Warning in Modal */}
+              {selectedProject && hasAlreadyRequestedProject(selectedProject.title, supervisorEmail) && (
+                <View style={styles.securityWarning}>
+                  <Ionicons name="warning" size={20} color="#FFA726" />
+                  <Text style={styles.securityWarningText}>
+                    You have already sent a request for this project to this supervisor.
+                  </Text>
+                </View>
+              )}
+              
               <View style={styles.inputContainer}>
                 <Ionicons name="mail" size={20} color="#6C63FF" style={styles.inputIcon} />
                 <TextInput
@@ -738,10 +831,32 @@ const ProjectSubmissionScreen = () => {
                 <TouchableOpacity
                   onPress={sendProjectRequest}
                   style={[styles.modalBtn, styles.submitBtn]}
+                  disabled={selectedProject && hasAlreadyRequestedProject(selectedProject.title, supervisorEmail)}
                 >
-                  <LinearGradient colors={['#6C63FF', '#8A7CFF']} style={styles.submitGradient}>
-                    <Text style={styles.submitBtnTxt}>Send Request</Text>
-                    <Ionicons name="send" size={18} color="#fff" style={{ marginLeft: 8 }} />
+                  <LinearGradient 
+                    colors={
+                      selectedProject && hasAlreadyRequestedProject(selectedProject.title, supervisorEmail) 
+                        ? ['#CCCCCC', '#999999'] 
+                        : ['#6C63FF', '#8A7CFF']
+                    } 
+                    style={styles.submitGradient}
+                  >
+                    <Text style={styles.submitBtnTxt}>
+                      {selectedProject && hasAlreadyRequestedProject(selectedProject.title, supervisorEmail) 
+                        ? 'Already Requested' 
+                        : 'Send Request'
+                      }
+                    </Text>
+                    <Ionicons 
+                      name={
+                        selectedProject && hasAlreadyRequestedProject(selectedProject.title, supervisorEmail) 
+                          ? "checkmark" 
+                          : "send"
+                      } 
+                      size={18} 
+                      color="#fff" 
+                      style={{ marginLeft: 8 }} 
+                    />
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
@@ -825,10 +940,8 @@ const ProjectSubmissionScreen = () => {
                 <Animated.Text
                   style={{
                     fontWeight: 'bold',
-                    color: blinkAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['#00c853', '#1de9b6'],
-                    }),
+                    color: '#00c853',
+                    opacity: blinkAnim
                   }}
                 >
                   {currentStatus?.status.toUpperCase()}
@@ -909,7 +1022,7 @@ const styles = StyleSheet.create({
     opacity: 0.2,
   },
 
-  // Tab Navigation
+  // Enhanced Tab Navigation
   tabContainer: {
     backgroundColor: '#fff',
     paddingVertical: 12,
@@ -923,14 +1036,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   tab: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
     marginHorizontal: 4,
     borderRadius: 20,
-    backgroundColor: '#f8f9fa',
+    overflow: 'hidden',
+  },
+  tabGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   activeTab: {
-    backgroundColor: '#6C63FF',
+    // Gradient is handled in tabGradient
   },
   tabText: {
     fontSize: 14,
@@ -945,7 +1063,7 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     padding: 16,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f8faff',
   },
   contentContainer: {
     paddingBottom: 40,
@@ -1179,7 +1297,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Enhanced Buttons
+  // Enhanced Buttons (Shadow removed)
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1189,11 +1307,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     marginTop: 8,
-    elevation: 2,
-    shadowColor: '#6C63FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
   secondaryBtn: {
     flexDirection: 'row',
@@ -1210,7 +1323,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
-    elevation: 2,
+    // No shadow property
   },
   dangerBtn: {
     flexDirection: 'row',
@@ -1219,19 +1332,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
-    elevation: 2,
+    // No shadow property
   },
   btnTxt: { 
     color: '#fff', 
     fontWeight: '600',
     fontSize: 14,
+    marginLeft: 6,
   },
   iconBtn: {
     backgroundColor: '#FF5C5C',
     padding: 10,
     borderRadius: 10,
     marginLeft: 10,
-    elevation: 2,
+    // No shadow property
   },
 
   // Button Container
@@ -1445,6 +1559,45 @@ const styles = StyleSheet.create({
   },
   statusIconContainer: {
     marginBottom: 20,
+  },
+   warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3CD',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#856404',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  disabledBtn: {
+    backgroundColor: '#CCCCCC',
+  },
+  disabledBtnTxt: {
+    color: '#999999',
+  },
+  securityWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3CD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFA726',
+  },
+  securityWarningText: {
+    fontSize: 14,
+    color: '#856404',
+    marginLeft: 8,
+    flex: 1,
+    fontWeight: '500',
   },
 });
 

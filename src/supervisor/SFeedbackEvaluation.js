@@ -13,7 +13,7 @@ import LinearGradient from 'react-native-linear-gradient';
 const { width, height } = Dimensions.get('window');
 
 // 🚨 IMPORTANT: Replace with your actual IP address and port
-const BASE_URL = 'http://192.168.10.8:3000/api/feedback';
+const BASE_URL = 'https://backendsuperviseme.vercel.app/api/feedback';
 
 // Premium Color Theme
 const theme = {

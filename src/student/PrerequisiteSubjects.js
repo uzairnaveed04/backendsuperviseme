@@ -379,7 +379,7 @@ const PrerequisiteSubjects = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 35,
+    paddingTop: 5,
   },
   background: {
     flex: 1,

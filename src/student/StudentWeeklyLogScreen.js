@@ -60,6 +60,7 @@ export default function StudentWeeklyLogScreen() {
 
   const [modal, setModal] = useState({ visible: false, msg: '' });
   const [showConfetti, setShowConfetti] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // 🆕 Added submitting state
 
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(50))[0];
@@ -190,8 +191,9 @@ export default function StudentWeeklyLogScreen() {
 
   /*── submit ──*/
   const submitLog = async () => {
-    if (!currentLog.trim()) return;
+    if (!currentLog.trim() || submitting) return; // 🆕 Prevent multiple submissions
     animateButton();
+    setSubmitting(true); // 🆕 Start loading
 
     try {
       const auth = getAuth();
@@ -199,37 +201,41 @@ export default function StudentWeeklyLogScreen() {
 
       if (!user) {
         setModal({ visible: true, msg: '❌ Please login first!' });
+        setSubmitting(false);
         return;
       }
 
       const token = await user.getIdToken();
 
-      const checkRes = await fetch("http://192.168.100.117:3000/api/supervision-status", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // 🆕 Optimized API calls with Promise.all for better performance
+      const [checkRes, submitRes] = await Promise.all([
+        fetch("https://backendsuperviseme.vercel.app/api/supervision-status", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch("https://backendsuperviseme.vercel.app/api/weekly-log/submit", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            logContent: currentLog.trim(),
+            supervisorEmail: supervisorEmail || "N/A",
+            weekStart: weekStart.toISOString(),
+          }),
+        })
+      ]);
 
       const checkData = await checkRes.json();
       console.log("Supervision check →", checkData);
 
       if (!checkData.success || !checkData.isSupervised) {
         setModal({ visible: true, msg: "❌ You must be supervised before submitting a weekly log" });
+        setSubmitting(false);
         return;
       }
 
-      const response = await fetch("http://192.168.100.117:3000/api/weekly-log/submit", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          logContent: currentLog.trim(),
-          supervisorEmail: supervisorEmail || "N/A",
-          weekStart: weekStart.toISOString(),
-        }),
-      });
-
-      const result = await response.json();
+      const result = await submitRes.json();
       console.log("Weekly log API result →", result);
 
       if (result.success) {
@@ -237,7 +243,8 @@ export default function StudentWeeklyLogScreen() {
         setTimeout(() => setShowConfetti(false), 3000);
         setModal({ visible: true, msg: "✅ Weekly log submitted successfully!" });
         setCurrentLog("");
-        loadLogs();
+        // 🆕 Optimized: Don't wait for logs to reload before showing success
+        setTimeout(() => loadLogs(), 500); // Load logs in background
       } else {
         setModal({ visible: true, msg: `❌ ${result.error || "Failed to submit"}` });
       }
@@ -245,6 +252,8 @@ export default function StudentWeeklyLogScreen() {
     } catch (e) {
       console.error("submit error →", e);
       setModal({ visible: true, msg: "❌ Unable to submit. Please try again." });
+    } finally {
+      setSubmitting(false); // 🆕 Stop loading
     }
   };
 
@@ -413,9 +422,9 @@ export default function StudentWeeklyLogScreen() {
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                (!currentLog.trim() || loadingSup) && styles.submitButtonDisabled
+                (!currentLog.trim() || loadingSup || submitting) && styles.submitButtonDisabled // 🆕 Added submitting check
               ]}
-              disabled={!currentLog.trim() || loadingSup}
+              disabled={!currentLog.trim() || loadingSup || submitting} // 🆕 Added submitting check
               onPress={submitLog}
             >
               <LinearGradient
@@ -424,12 +433,26 @@ export default function StudentWeeklyLogScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <MaterialIcons name="send" size={20} color="#fff" />
-                <Text style={styles.submitButtonText}>Submit Weekly Report</Text>
-                <Ionicons name="rocket" size={16} color="#FFF" style={styles.submitIcon} />
+                {/* 🆕 Show ActivityIndicator when submitting */}
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <MaterialIcons name="send" size={20} color="#fff" />
+                    <Text style={styles.submitButtonText}>Submit Weekly Report</Text>
+                    <Ionicons name="rocket" size={16} color="#FFF" style={styles.submitIcon} />
+                  </>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
+
+          {/* 🆕 Show quick status message */}
+          {submitting && (
+            <Animatable.View animation="fadeIn" style={styles.submittingStatus}>
+              <Text style={styles.submittingText}>Submitting your report...</Text>
+            </Animatable.View>
+          )}
         </Animatable.View>
 
         {/* Previous Reports Section */}
@@ -733,6 +756,20 @@ const styles = StyleSheet.create({
   submitIcon: {
     marginLeft: 10,
     opacity: 0.9,
+  },
+  
+  /* 🆕 Submitting Status */
+  submittingStatus: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  submittingText: {
+    color: '#6366F1',
+    fontSize: 14,
+    fontWeight: '500',
   },
 
   /* Reports Section */

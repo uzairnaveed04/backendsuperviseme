@@ -22,7 +22,7 @@ import ConfettiCannon from "react-native-confetti-cannon";
 
 // 🛑 FIX: URL path ko /api/upload kar diya gaya hai, taaki woh backend route se match kare.
 
-const SERVER_URL = "http://192.168.10.8:3000/api/upload"; // backend set to 192.168.10.8
+const SERVER_URL = "http://backendsuperviseme.vercel.app/api/upload"; // backend set to 192.168.10.8
 
 const { FilePickerModule } = NativeModules;
 const { width, height } = Dimensions.get('window');
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingBottom: 40,
-    paddingTop: 45
+    paddingTop: 5
   },
   
   /* Enhanced Header */

@@ -103,7 +103,7 @@ const handleLogin = async () => {
       console.log('Posting verification to backend, token preview:', token.substring(0,40));
       const requestBody = { email };
       console.log('Verification request body:', requestBody);
-      const response = await fetch('http://192.168.10.3:3000/api/supervisor/verify', {
+      const response = await fetch('https://backendsuperviseme.vercel.app/api/supervisor/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -203,7 +203,7 @@ const handleLogin = async () => {
       }
 
       const token = await user.getIdToken();
-      const response = await fetch('http://192.168.10.3:3000/api/supervisor/update-password', {
+      const response = await fetch('https://backendsuperviseme.vercel.app/api/supervisor/update-password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

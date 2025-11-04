@@ -46,7 +46,7 @@ const SupervisorConnectionRequestsScreen = () => {
       // 1️⃣ Pending Requests - Use backend API
       try {
         const token = await auth.currentUser.getIdToken();
-        const response = await fetch('http://192.168.100.15:3000/api/connection-requests', {
+        const response = await fetch('https://backendsuperviseme.vercel.app/api/connection-requests', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -65,7 +65,7 @@ const SupervisorConnectionRequestsScreen = () => {
       // 2️⃣ Active Connections - Use backend API
       try {
         const token = await auth.currentUser.getIdToken();
-        const response = await fetch('http://192.168.100.15:3000/api/connections', {
+        const response = await fetch('https://backendsuperviseme.vercel.app/api/connections', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -98,7 +98,7 @@ const SupervisorConnectionRequestsScreen = () => {
       setReposLoading(true);
       const token = await auth.currentUser?.getIdToken?.();
       if (token) {
-        const resp = await fetch(`http://192.168.100.15:3000/api/student-repositories/${studentUID}`, {
+        const resp = await fetch(`https://backendsuperviseme.vercel.app/api/student-repositories/${studentUID}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -129,7 +129,7 @@ const SupervisorConnectionRequestsScreen = () => {
       setSelectedStudent(student);
       const token = await auth.currentUser?.getIdToken?.();
       if (token) {
-        await fetch(`${process.env.BACKEND_URL || 'http://192.168.100.15:3000'}/link-student-repos`, {
+        await fetch(`${process.env.BACKEND_URL || 'https://backendsuperviseme.vercel.app'}/link-student-repos`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -171,7 +171,7 @@ const SupervisorConnectionRequestsScreen = () => {
     try {
       const token = await auth.currentUser?.getIdToken?.();
       if (!token) return { active: [], inactive: [] };
-      const resp = await fetch(`${process.env.BACKEND_URL || 'http://192.168.100.15:3000'}/api/supervisor/repo-data/${owner}/${name}`, {
+      const resp = await fetch(`${process.env.BACKEND_URL || 'https://backendsuperviseme.vercel.app'}/api/supervisor/repo-data/${owner}/${name}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!resp.ok) return { active: [], inactive: [] };
@@ -185,7 +185,7 @@ const SupervisorConnectionRequestsScreen = () => {
   const handleDecision = async (requestId, decision, studentData) => {
     try {
       const token = await auth.currentUser.getIdToken();
-      const response = await fetch(`http://192.168.100.15:3000/api/connection-requests/${requestId}`, {
+      const response = await fetch(`https://backendsuperviseme.vercel.app/api/connection-requests/${requestId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

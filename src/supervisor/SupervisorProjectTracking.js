@@ -14,7 +14,8 @@ import {
   Dimensions,
   ScrollView,
   StatusBar,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -29,7 +30,8 @@ import {
   where,
   getDocs,
   deleteDoc,
-  limit
+  limit,
+  arrayUnion
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -57,6 +59,7 @@ const SupervisorProjectTracking = () => {
   const [deletedRequests, setDeletedRequests] = useState([]);
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('requests');
+  const [updatingStatus, setUpdatingStatus] = useState(false); // ✅ New state for status update loading
   
   // Premium Animations
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -113,17 +116,17 @@ const SupervisorProjectTracking = () => {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const data = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(request => 
+            !request.hiddenForSupervisors || 
+            !request.hiddenForSupervisors.includes(supervisorEmail)
+          );
+        
         setRequests(data);
       },
       (error) => {
-        if (error.code === 'failed-precondition') {
-          setDialog({
-            visible: true,
-            title: '⚠️ Firestore Index Required',
-            message: 'Please create composite index for: supervisorEmail + createdAt'
-          });
-        }
+        console.log('Firestore error:', error);
       }
     );
 
@@ -134,11 +137,14 @@ const SupervisorProjectTracking = () => {
     setDialog({ visible: true, title, message });
   };
 
+  // ✅ IMPROVED: Status update with loading state
   const updateRequestStatus = async () => {
     if (!selectedRequest || !status) {
       showMessage('Error', 'Status is required');
       return;
     }
+
+    setUpdatingStatus(true); // ✅ Start loading
 
     try {
       await updateDoc(doc(db, 'projectRequests', selectedRequest.id), {
@@ -156,8 +162,12 @@ const SupervisorProjectTracking = () => {
       );
       
       setStatusModal(false);
+      setStatus('');
+      setComment('');
+      setUpdatingStatus(false); // ✅ Stop loading
       showMessage('✅ Success', 'Status updated successfully');
     } catch (err) {
+      setUpdatingStatus(false); // ✅ Stop loading on error
       showMessage('❌ Error', err.message);
     }
   };
@@ -195,53 +205,6 @@ const SupervisorProjectTracking = () => {
     }
   };
 
-  const deleteProjectAssignedFromRequest = async (request) => {
-    Alert.alert(
-      "🗑️ Confirm Delete",
-      "Are you sure you want to hide this project from your view? This action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Hide",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              // Hide project for supervisor only
-              console.log('Auth supervisorEmail:', supervisorEmail);
-              console.log('Request supervisorEmail:', request.supervisorEmail);
-              const q = query(
-                collection(db, 'projects'),
-                where('requestId', '==', request.id),
-                where('assignedFromRequest', '==', true)
-              );
-              const snapshot = await getDocs(q);
-              for (const docSnap of snapshot.docs) {
-                await updateDoc(doc(db, 'projects', docSnap.id), {
-                  visibleToSupervisor: false,
-                });
-              }
-              setDeletedRequests((prev) => [...prev, request.id]);
-              setRequests((prev) => prev.filter((r) => r.id !== request.id));
-              showMessage('✅ Success', 'Project hidden from supervisor view!');
-            } catch (err) {
-              let errorMsg = 'Unknown error';
-              if (err && err.code) {
-                errorMsg = `Code: ${err.code}\nMessage: ${err.message}`;
-              } else if (err && err.message) {
-                errorMsg = err.message;
-              }
-              showMessage('❌ Error', errorMsg);
-              console.log('Firestore update error:', err);
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const manuallyCreateProject = async () => {
     if (!projectTitle || !description || !deadline || !studentEmail) {
       showMessage('Error', 'All fields are required');
@@ -249,8 +212,25 @@ const SupervisorProjectTracking = () => {
     }
 
     const cleanEmail = studentEmail.trim().toLowerCase();
+    
+    if (cleanEmail === supervisorEmail) {
+      showMessage('Error', 'You cannot assign project to yourself. Please enter student email only.');
+      return;
+    }
+
     if (!cleanEmail.endsWith('@cuiatk.edu.pk')) {
-      showMessage('Error', 'Enter a valid student email');
+      showMessage('Error', 'Enter a valid student email address');
+      return;
+    }
+
+    const supervisorEmails = [
+      supervisorEmail,
+      'supervisor@cuiatk.edu.pk',
+      'faculty@cuiatk.edu.pk'
+    ];
+
+    if (supervisorEmails.includes(cleanEmail)) {
+      showMessage('Error', 'This email belongs to a supervisor. Please enter student email only.');
       return;
     }
 
@@ -262,7 +242,7 @@ const SupervisorProjectTracking = () => {
         description: description.trim(),
         deadline: deadline.trim(),
         studentEmail: cleanEmail,
-        supervisorEmail: supervisorEmail ? supervisorEmail.toLowerCase() : '', // Always set supervisorEmail
+        supervisorEmail: supervisorEmail ? supervisorEmail.toLowerCase() : '',
         status: 'available',
         visibleToSupervisor: true,
         isSupervisorCreated: true,
@@ -279,6 +259,37 @@ const SupervisorProjectTracking = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearAllRequests = async () => {
+    Alert.alert(
+      "🗑️ Clear All",
+      "Are you sure you want to permanently hide all requests from your view?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Clear All",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              for (const request of requests) {
+                await updateDoc(doc(db, 'projectRequests', request.id), {
+                  hiddenForSupervisors: arrayUnion(supervisorEmail)
+                });
+              }
+              
+              setRequests([]);
+              showMessage('✅ Success', 'All requests permanently hidden from your view!');
+            } catch (err) {
+              showMessage('❌ Error', err.message);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getStatusColor = (status) => {
@@ -344,7 +355,6 @@ const SupervisorProjectTracking = () => {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          {/* Animated Background Elements */}
           <View style={styles.headerBg1} />
           <View style={styles.headerBg2} />
           <View style={styles.headerBg3} />
@@ -452,6 +462,26 @@ const SupervisorProjectTracking = () => {
           </TouchableOpacity>
         </View>
       </Animated.View>
+
+      {/* 🗑️ Clear All Button */}
+      {requests.length > 0 && activeTab === 'requests' && (
+        <View style={styles.clearAllContainer}>
+          <TouchableOpacity
+            style={styles.clearAllButton}
+            onPress={clearAllRequests}
+          >
+            <LinearGradient
+              colors={['#FF6B9C', '#FF4757']}
+              style={styles.clearAllGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="trash" size={20} color="#FFF" />
+              <Text style={styles.clearAllText}>Clear All Requests</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
@@ -736,21 +766,6 @@ const SupervisorProjectTracking = () => {
                             </Text>
                           </LinearGradient>
                         </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.actionButton}
-                          onPress={() => deleteProjectAssignedFromRequest(item)}
-                        >
-                          <LinearGradient
-                            colors={['#FF6B9C', '#FF4775']}
-                            style={styles.actionButtonGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                          >
-                            <Ionicons name="trash" size={18} color="#FFF" />
-                            <Text style={styles.actionButtonText}>Delete</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
                       </View>
                     </LinearGradient>
                   </Animatable.View>
@@ -761,7 +776,7 @@ const SupervisorProjectTracking = () => {
         )}
       </ScrollView>
 
-      {/* ✨ Ultra Premium Status Modal */}
+      {/* ✨ IMPROVED Status Modal */}
       <Modal visible={statusModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <Animatable.View
@@ -828,10 +843,16 @@ const SupervisorProjectTracking = () => {
               </View>
             </View>
 
+            {/* ✅ IMPROVED: Fixed button alignment */}
             <View style={styles.modalFooter}>
               <TouchableOpacity 
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setStatusModal(false)}
+                onPress={() => {
+                  setStatusModal(false);
+                  setStatus('');
+                  setComment('');
+                }}
+                disabled={updatingStatus}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -839,6 +860,7 @@ const SupervisorProjectTracking = () => {
               <TouchableOpacity 
                 style={styles.modalButton}
                 onPress={updateRequestStatus}
+                disabled={updatingStatus}
               >
                 <LinearGradient
                   colors={['#8B5CF6', '#6366F1']}
@@ -846,7 +868,11 @@ const SupervisorProjectTracking = () => {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.modalButtonText}>Update Status</Text>
+                  {updatingStatus ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Update Status</Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -889,7 +915,7 @@ const SupervisorProjectTracking = () => {
   );
 }
 
-const styles = StyleSheet.create({
+  const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
@@ -1025,6 +1051,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  // 🗑️ Clear All Button
+  clearAllContainer: {
+    paddingHorizontal: 25,
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  clearAllButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+  },
+  clearAllGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  clearAllText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
   scrollContainer: {
     padding: 25,
     paddingBottom: 30,
@@ -1046,10 +1096,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowRadius: 15,
+    elevation: 5,
   },
   sectionGradient: {
+    borderRadius: 25,
     padding: 25,
   },
   sectionHeader: {
@@ -1060,27 +1111,27 @@ const styles = StyleSheet.create({
   sectionIcon: {
     width: 60,
     height: 60,
-    borderRadius: 18,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#1E293B',
     marginBottom: 4,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#64748B',
   },
-  // 📝 Premium Form
+  // 📝 Form Styles
   form: {
     gap: 20,
   },
   inputGroup: {
-    gap: 10,
+    gap: 8,
   },
   inputLabelContainer: {
     flexDirection: 'row',
@@ -1090,73 +1141,61 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: '#1E293B',
   },
   inputContainer: {
     borderRadius: 15,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  textAreaContainer: {
-    paddingVertical: 16,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   input: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    paddingVertical: 12,
     color: '#1E293B',
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  textAreaContainer: {
+    minHeight: 120,
   },
   textArea: {
-    height: 120,
-    paddingTop: 0,
+    height: 110,
+    textAlignVertical: 'top',
   },
-  // 🚀 Premium Buttons
+  // 🎯 Buttons
   createButton: {
     borderRadius: 15,
     overflow: 'hidden',
     marginTop: 10,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
   },
   createButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderRadius: 15,
+    gap: 12,
   },
   createButtonText: {
     color: '#FFF',
-    fontWeight: 'bold',
     fontSize: 18,
-    marginLeft: 12,
+    fontWeight: 'bold',
   },
-  // 💎 Premium Cards
+  // 💎 Requests List
   emptyContainer: {
-    backgroundColor: '#FFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 50,
-    borderRadius: 25,
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+    paddingVertical: 60,
+    paddingHorizontal: 40,
   },
   emptyText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1E293B',
-    marginTop: 20,
+    color: '#8B5CF6',
+    marginTop: 16,
     marginBottom: 8,
   },
   emptySubtext: {
@@ -1165,55 +1204,53 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   requestsList: {
-    gap: 15,
+    gap: 16,
   },
   card: {
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.1,
     shadowRadius: 15,
-    elevation: 6,
+    elevation: 5,
   },
   cardGradient: {
-    padding: 0,
-    overflow: 'hidden',
+    borderRadius: 20,
+    padding: 20,
   },
   cardHeader: {
-    padding: 25,
-    paddingBottom: 20,
+    marginBottom: 15,
   },
   cardTitleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 8,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1E293B',
     flex: 1,
-    marginRight: 15,
-    lineHeight: 24,
+    marginRight: 12,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
     gap: 6,
   },
   statusText: {
+    color: '#FFF',
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#FFF',
   },
   cardBody: {
-    paddingHorizontal: 25,
-    paddingBottom: 25,
     gap: 12,
+    marginBottom: 20,
   },
   detailRow: {
     flexDirection: 'row',
@@ -1225,83 +1262,77 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   description: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 22,
-  },
-  commentContainer: {
-    backgroundColor: '#F1F5F9',
-    padding: 15,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  commentLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#6366F1',
-    marginBottom: 6,
-  },
-  commentText: {
     fontSize: 14,
     color: '#475569',
     lineHeight: 20,
   },
+  commentContainer: {
+    backgroundColor: '#F1F5F9',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  commentLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#6366F1',
+    marginBottom: 4,
+  },
+  commentText: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 18,
+  },
   cardFooter: {
     flexDirection: 'row',
-    padding: 25,
-    paddingTop: 0,
-    gap: 10,
+    gap: 12,
   },
   actionButton: {
     flex: 1,
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   actionButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
     gap: 8,
   },
   actionButtonText: {
     color: '#FFF',
-    fontWeight: '600',
     fontSize: 14,
+    fontWeight: 'bold',
   },
-  // ✨ Premium Modals
+  // ✨ Modal Styles
   modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 25,
   },
   modalContent: {
     width: '100%',
     borderRadius: 25,
     overflow: 'hidden',
+    backgroundColor: '#FFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.3,
-    shadowRadius: 25,
+    shadowRadius: 30,
     elevation: 15,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 25,
+    gap: 15,
   },
   modalHeaderText: {
     flex: 1,
-    marginLeft: 15,
   },
   modalTitle: {
     fontSize: 22,
@@ -1310,21 +1341,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modalSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFF',
     opacity: 0.9,
   },
   modalBody: {
-    backgroundColor: '#FFF',
     padding: 25,
     gap: 20,
   },
   modalFooter: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
-    padding: 25,
-    paddingTop: 0,
-    gap: 15,
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
   },
   modalButton: {
     flex: 1,
@@ -1332,46 +1362,52 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   modalButtonGradient: {
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-  },
-  cancelButtonText: {
-    color: '#64748B',
-    fontWeight: '600',
-    fontSize: 16,
+    justifyContent: 'center',
+    borderRadius: 12,
   },
   modalButtonText: {
     color: '#FFF',
-    fontWeight: 'bold',
     fontSize: 16,
+    fontWeight: 'bold',
   },
-  // 🎭 Premium Dialog
-  dialogContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 25,
-    padding: 30,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 25,
-    elevation: 15,
+  cancelButton: {
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
   },
+  cancelButtonText: {
+    textAlign: 'center',
+    paddingVertical: 14,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#64748B',
+  },
+  // 🎭 Dialog Styles
+ dialogContent: {
+  backgroundColor: '#FFF',
+  borderRadius: 25,
+  padding: 30,
+  alignItems: 'center',
+  marginHorizontal: 25,
+  marginVertical: '15%',
+  alignSelf: 'center',
+  minWidth: width * 0.8, // ✅ Minimum width guarantee
+  maxWidth: width * 0.9, // ✅ Maximum width limit
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 20 },
+  shadowOpacity: 0.3,
+  shadowRadius: 30,
+  elevation: 15,
+},
   dialogTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
-    marginTop: 15,
-    marginBottom: 10,
   },
   dialogMessage: {
     fontSize: 16,
@@ -1380,20 +1416,22 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 25,
   },
-  dialogButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  dialogButtonGradient: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
+dialogButton: {
+  borderRadius: 25, // ✅ Increase borderRadius for more rounded look
+  overflow: 'hidden',
+  width: '100%', // ✅ Full width
+},
+ dialogButtonGradient: {
+  paddingVertical: 16,
+  paddingHorizontal: 40, // ✅ Horizontal padding increase karo
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 25, // ✅ Same as button
+},
   dialogButtonText: {
     color: '#FFF',
-    fontWeight: 'bold',
     fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

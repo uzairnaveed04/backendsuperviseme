@@ -12,12 +12,14 @@ import {
   StatusBar,
   Animated,
   Easing,
+  Modal,
 } from "react-native";
 import RNFS from "react-native-fs";
 import FileViewer from "react-native-file-viewer";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import LinearGradient from "react-native-linear-gradient";
+import * as Animatable from 'react-native-animatable';
 
 const { width, height } = Dimensions.get("window");
 
@@ -27,6 +29,8 @@ const SupervisorFilesScreen = () => {
   const [supervisorEmail, setSupervisorEmail] = useState(null);
   const [downloadingFile, setDownloadingFile] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false); // 🆕 Download confirmation modal
+  const [selectedFile, setSelectedFile] = useState(null); // 🆕 Selected file for download
 
   // Premium Animations
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -80,7 +84,7 @@ const SupervisorFilesScreen = () => {
       else setRefreshing(true);
 
       const res = await fetch(
-        `http://192.168.10.8:3000/api/supervisor/files?supervisorEmail=${encodeURIComponent(
+        `https://backendsuperviseme.vercel.app/api/supervisor/files?supervisorEmail=${encodeURIComponent(
           supervisorEmail
         )}`
       );
@@ -106,6 +110,21 @@ const SupervisorFilesScreen = () => {
     }
   }, [supervisorEmail]);
 
+  // 🆕 Show download confirmation dialog
+  const showDownloadConfirmation = (file) => {
+    setSelectedFile(file);
+    setDownloadModalVisible(true);
+  };
+
+  // 🆕 Handle confirmed download
+  const handleConfirmedDownload = async () => {
+    if (!selectedFile) return;
+    
+    setDownloadModalVisible(false);
+    await handleDownload(selectedFile);
+    setSelectedFile(null);
+  };
+
   // ✅ Handle file download and opening
   const handleDownload = async (file) => {
     try {
@@ -119,7 +138,7 @@ const SupervisorFilesScreen = () => {
         }
       }
 
-      const fileUrl = `http://192.168.10.8:3000/api/supervisor/download?studentEmail=${encodeURIComponent(
+      const fileUrl = `https://backendsuperviseme.vercel.app/api/supervisor/download?studentEmail=${encodeURIComponent(
         file.studentEmail
       )}&filename=${encodeURIComponent(file.filename)}`;
       const safeName = file.originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
@@ -206,6 +225,105 @@ const SupervisorFilesScreen = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
+  // 🆕 Fancy Download Confirmation Modal
+  const DownloadConfirmationModal = () => (
+    <Modal
+      transparent={true}
+      visible={downloadModalVisible}
+      animationType="fade"
+      onRequestClose={() => setDownloadModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <Animatable.View 
+          animation="bounceIn"
+          duration={600}
+          style={styles.modalContainer}
+        >
+          <LinearGradient
+            colors={['#FF9800', '#FF9800']}
+            style={styles.modalHeader}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="cloud-download" size={40} color="#FFFFFF" />
+            </View>
+          </LinearGradient>
+
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Download File</Text>
+            
+            {selectedFile && (
+              <View style={styles.fileInfoModal}>
+                <View style={styles.fileIconModal}>
+                  <Ionicons 
+                    name={getFileIcon(selectedFile.originalName)} 
+                    size={32} 
+                    color={getFileColor(selectedFile.originalName)} 
+                  />
+                </View>
+                <View style={styles.fileDetailsModal}>
+                  <Text style={styles.fileNameModal} numberOfLines={2}>
+                    {decodeURIComponent(selectedFile.originalName)}
+                  </Text>
+                  <View style={styles.fileMetaModal}>
+                    <View style={styles.metaItemModal}>
+                      <Ionicons name="person" size={14} color="#64748B" />
+                      <Text style={styles.metaTextModal}>{selectedFile.studentEmail}</Text>
+                    </View>
+                    <View style={styles.metaItemModal}>
+                      <Ionicons name="analytics" size={14} color="#64748B" />
+                      <Text style={styles.metaTextModal}>{formatFileSize(selectedFile.size || 0)}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <Text style={styles.modalMessage}>
+              Are you sure you want to download this file? The file will be saved to your device and opened automatically.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => {
+                  setDownloadModalVisible(false);
+                  setSelectedFile(null);
+                }}
+              >
+                <LinearGradient
+                  colors={['#F1F5F9', '#E2E8F0']}
+                  style={styles.cancelButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="close" size={20} color="#64748B" />
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.confirmButton}
+                onPress={handleConfirmedDownload}
+              >
+                <LinearGradient
+                  colors={['#FF9800', '#FF9800']}
+                  style={styles.confirmButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="download" size={20} color="#FFFFFF" />
+                  <Text style={styles.confirmButtonText}>Download</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Animatable.View>
+      </View>
+    </Modal>
+  );
+
   const FileCard = ({ item, index }) => (
     <Animated.View
       style={[
@@ -269,7 +387,7 @@ const SupervisorFilesScreen = () => {
         {/* Download Button */}
         <TouchableOpacity
           style={styles.downloadBtn}
-          onPress={() => handleDownload(item)}
+          onPress={() => showDownloadConfirmation(item)} // 🆕 Changed to show confirmation
           disabled={downloadingFile === item.filename}
         >
           <LinearGradient
@@ -438,6 +556,9 @@ const SupervisorFilesScreen = () => {
           </View>
         )}
       </Animated.View>
+
+      {/* 🆕 Fancy Download Confirmation Modal */}
+      <DownloadConfirmationModal />
     </View>
   );
 };
@@ -460,7 +581,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
-    // Removed shadow properties
   },
   loadingText: {
     fontSize: 22,
@@ -486,7 +606,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
-    // Removed shadow properties
   },
   errorTitle: {
     fontSize: 26,
@@ -508,7 +627,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    // Removed shadow properties
   },
   headerContent: {
     flexDirection: "row",
@@ -528,7 +646,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
-    // Removed shadow properties
   },
   headerTextContainer: {
     flex: 1,
@@ -538,7 +655,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFFFFF",
     marginBottom: 4,
-    textShadowColor: "rgba(0,0,0,0.1)", // Kept text shadow as it's not icon shadow
+    textShadowColor: "rgba(0,0,0,0.1)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
@@ -554,7 +671,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     alignItems: "center",
-    // Removed shadow properties
   },
   fileCountNumber: {
     color: "#FFFFFF",
@@ -583,7 +699,6 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     width: "100%",
     maxWidth: 400,
-    // Removed shadow properties
   },
   emptyIconContainer: {
     width: 160,
@@ -611,7 +726,6 @@ const styles = StyleSheet.create({
   refreshButton: {
     borderRadius: 16,
     overflow: "hidden",
-    // Removed shadow properties
   },
   refreshButtonGradient: {
     flexDirection: "row",
@@ -649,7 +763,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F1F5F9",
-    // Removed shadow properties
   },
   flatListContent: {
     paddingBottom: 20,
@@ -659,7 +772,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     overflow: "hidden",
     marginBottom: 20,
-    // Removed shadow properties
   },
   cardGradient: {
     padding: 25,
@@ -677,7 +789,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 18,
-    // Removed shadow properties
   },
   fileInfo: {
     flex: 1,
@@ -728,7 +839,6 @@ const styles = StyleSheet.create({
   downloadBtn: {
     borderRadius: 16,
     overflow: "hidden",
-    // Removed shadow properties
   },
   downloadBtnGradient: {
     flexDirection: "row",
@@ -741,6 +851,130 @@ const styles = StyleSheet.create({
   btnText: {
     color: "#FFFFFF",
     fontWeight: "bold",
+    fontSize: 16,
+  },
+  // 🆕 Fancy Download Confirmation Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    overflow: 'hidden',
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    padding: 25,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#1E293B',
+  },
+  fileInfoModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  fileIconModal: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  fileDetailsModal: {
+    flex: 1,
+  },
+  fileNameModal: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  fileMetaModal: {
+    gap: 8,
+  },
+  metaItemModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaTextModal: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  modalMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    color: '#64748B',
+    marginBottom: 25,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  cancelButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  cancelButtonText: {
+    color: '#64748B',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  confirmButton: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  confirmButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
     fontSize: 16,
   },
 });
