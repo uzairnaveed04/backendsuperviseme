@@ -728,58 +728,58 @@ app.post('/connect-supervisor', async (req, res) => {
   }
 });
 
-// app.get('/supervisor-view/:supervisorEmail', async (req, res) => {
-//   const { supervisorEmail } = req.params;
+app.get('/supervisor-view/:supervisorEmail', async (req, res) => {
+  const { supervisorEmail } = req.params;
 
-//   try {
-//     // 1. Get approved connections
-//     const connectionsQuery = query(
-//       collection(db, 'supervisor_connections'),
-//       where('supervisorEmail', '==', supervisorEmail.replace(/\./g, '_')),
-//       where('status', '==', 'approved')
-//     );
+  try {
+    // 1. Get approved connections
+    const connectionsQuery = query(
+      collection(db, 'supervisor_connections'),
+      where('supervisorEmail', '==', supervisorEmail.replace(/\./g, '_')),
+      where('status', '==', 'approved')
+    );
     
-//     const connectionsSnapshot = await getDocs(connectionsQuery);
-//     const studentsData = [];
+    const connectionsSnapshot = await getDocs(connectionsQuery);
+    const studentsData = [];
 
-//     // 2. Get data for each connected student
-//     for (const doc of connectionsSnapshot.docs) {
-//       const connection = doc.data();
+    // 2. Get data for each connected student
+    for (const doc of connectionsSnapshot.docs) {
+      const connection = doc.data();
       
-//       // Get student profile
-//       const studentDoc = await getDoc(doc(db, 'github_users', connection.studentEmail));
-//       const studentData = studentDoc.exists() ? studentDoc.data() : null;
+      // Get student profile
+      const studentDoc = await getDoc(doc(db, 'github_users', connection.studentEmail));
+      const studentData = studentDoc.exists() ? studentDoc.data() : null;
       
-//       // Get repositories
-//       const reposQuery = query(
-//         collection(db, 'github_upload'),
-//         where('owner', '==', studentData?.profile?.username || '')
-//       );
-//       const reposSnapshot = await getDocs(reposQuery);
-//       const reposData = reposSnapshot.docs.map(doc => doc.data());
+      // Get repositories
+      const reposQuery = query(
+        collection(db, 'github_upload'),
+        where('owner', '==', studentData?.profile?.username || '')
+      );
+      const reposSnapshot = await getDocs(reposQuery);
+      const reposData = reposSnapshot.docs.map(doc => doc.data());
       
-//       studentsData.push({
-//         connectionId: doc.id,
-//         ...connection,
-//         student: studentData?.profile || null,
-//         repositories: reposData,
-//         contributions: studentData?.contributions || []
-//       });
-//     }
+      studentsData.push({
+        connectionId: doc.id,
+        ...connection,
+        student: studentData?.profile || null,
+        repositories: reposData,
+        contributions: studentData?.contributions || []
+      });
+    }
 
-//     res.json({
-//       success: true,
-//       students: studentsData
-//     });
+    res.json({
+      success: true,
+      students: studentsData
+    });
 
-//   } catch (error) {
-//     console.error('Supervisor view error:', error);
-//     res.status(500).json({
-//       success: false,
-//       error: error.message
-//     });
-//   }
-// });
+  } catch (error) {
+    console.error('Supervisor view error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 
 app.post('/create-team-repo', async (req, res) => {
@@ -2038,42 +2038,42 @@ app.get('/api/contributors/:owner/:repo', authenticateUser, async (req, res) => 
 
 // // ✅ SECURE CONNECTION REQUEST ENDPOINTS
 
-// // GET: Get connection requests for supervisor
-// app.get('/api/connection-requests', authenticateUser, async (req, res) => {
-//   try {
-//     const supervisorUID = req.user.uid;
-//     const supervisorEmail = req.user.email;
-//     const safeSupervisorEmail = supervisorEmail.replace(/\./g, '_').replace(/@/g, '_');
+// GET: Get connection requests for supervisor
+app.get('/api/connection-requests', authenticateUser, async (req, res) => {
+  try {
+    const supervisorUID = req.user.uid;
+    const supervisorEmail = req.user.email;
+    const safeSupervisorEmail = supervisorEmail.replace(/\./g, '_').replace(/@/g, '_');
 
-//     console.log('🔍 Fetching requests for supervisor:', supervisorEmail);
+    console.log('🔍 Fetching requests for supervisor:', supervisorEmail);
 
-//     // Query by email and safe email
-//     const requestsSnap = await adminDb
-//       .collection('connection_requests')
-//       .where('status', '==', 'pending')
-//       .get();
+    // Query by email and safe email
+    const requestsSnap = await adminDb
+      .collection('connection_requests')
+      .where('status', '==', 'pending')
+      .get();
 
-//     // Filter results for this supervisor only
-//     const requests = [];
-//     requestsSnap.forEach(doc => {
-//       const data = doc.data();
-//       if (data.supervisorEmail === supervisorEmail ||
-//           data.safeSupervisorEmail === safeSupervisorEmail) {
-//         requests.push({
-//           id: doc.id,
-//           ...data,
-//           timestamp: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
-//         });
-//       }
-//     });
+    // Filter results for this supervisor only
+    const requests = [];
+    requestsSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.supervisorEmail === supervisorEmail ||
+          data.safeSupervisorEmail === safeSupervisorEmail) {
+        requests.push({
+          id: doc.id,
+          ...data,
+          timestamp: data.createdAt?.toDate?.()?.toISOString() || data.createdAt
+        });
+      }
+    });
 
-//     console.log('✅ Found requests:', requests.length);
-//     res.json({ success: true, data: requests });
-//   } catch (error) {
-//     console.error('Error fetching connection requests:', error);
-//     res.status(500).json({ success: false, error: 'Internal server error' });
-//   }
-// });
+    console.log('✅ Found requests:', requests.length);
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    console.error('Error fetching connection requests:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 // POST: Create connection request (student)
 app.post('/api/connection-requests', authenticateUser, async (req, res) => {
@@ -2218,18 +2218,9 @@ app.get('/api/connections', authenticateUser, async (req, res) => {
 });
 
 
-
-
-
-
-
-
-
-
-
-
 // Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+export default app;
