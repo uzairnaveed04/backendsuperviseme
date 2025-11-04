@@ -5,16 +5,14 @@ import dotenv from 'dotenv';
 import { db } from './firebaseAdmin.js';
 import { getFirestore, collection, query, where, getDocs, setDoc, doc, getDoc, writeBatch, orderBy } from 'firebase/firestore';
 import admin from 'firebase-admin';
-import serviceAccount from './serviceAccountKey.json' with { type: 'json' };
+import serviceAccount from './serviceAccountKey.json' assert { type: 'json' };
 import path from "path";
-
 
 import weeklyLogRoutes from "./weeklyLogRoutes.js";
 import supervisorRouter from "./supervisorRouter.js";
-// import studentRoutes from "./routes/studentRoutes.js";
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import uploadRouter from "./routes/uploadRouter.js";
-import feedbackRoutes from './routes/feedbackRoutes.js'
+import feedbackRoutes from './routes/feedbackRoutes.js';
 
 
 
