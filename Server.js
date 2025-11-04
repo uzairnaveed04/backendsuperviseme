@@ -8,13 +8,11 @@ import admin from 'firebase-admin';
 import serviceAccount from './serviceAccountKey.json' assert { type: 'json' };
 import path from "path";
 
-
 import weeklyLogRoutes from "./weeklyLogRoutes.js";
 import supervisorRouter from "./supervisorRouter.js";
-// import studentRoutes from "./routes/studentRoutes.js";
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import uploadRouter from "./routes/uploadRouter.js";
-import feedbackRoutes from './routes/feedbackRoutes.js'
+import feedbackRoutes from './routes/feedbackRoutes.js';
 
 
 
@@ -2223,3 +2221,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+export default app;

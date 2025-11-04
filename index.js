@@ -1,26 +1,25 @@
-// backend/index.js
+// Import dependencies
 import express from 'express';
 import cors from 'cors';
-import server from './Server.js'; // ES module import, include file extension
+import server from './Server.js'; // ⚠️ ES Module me .js extension include karna zaroori hai
 
+// Create app
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Test route
+// Default route
 app.get('/', (req, res) => {
   res.send('Backend is working!');
 });
 
-// Agar tum Server.js me routes define kar rahe ho
-// app.use('/api', server); // Uncomment if needed
-
-// Server start
+// Run server (for local testing)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
 
+// Export app (for Vercel deployment)
 export default app;
