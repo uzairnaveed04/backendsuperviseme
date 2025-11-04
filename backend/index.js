@@ -1,7 +1,7 @@
 // Import dependencies
-const express = require('express');
-const cors = require('cors');
-const server = require('./Server'); // 👈 ye line add karo (agar Server.js exist karta hai)
+import express from 'express';
+import cors from 'cors';
+import server from './Server.js'; // ⚠️ ES Module me .js extension include karna zaroori hai
 
 // Create app
 const app = express();
@@ -22,4 +22,4 @@ app.listen(PORT, () => {
 });
 
 // Export app (for Vercel deployment)
-module.exports = app;
+export default app;
